@@ -1,9 +1,6 @@
 use std::io::{self, BufRead, BufReader, Read, Seek};
 
-use self::{rev_buf_read::RevBufRead, rev_read::RevRead};
-
-mod rev_buf_read;
-mod rev_read;
+use crate::{RevBufRead, RevRead};
 
 #[derive(Debug)]
 pub struct BiBufReader<R> {

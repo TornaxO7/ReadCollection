@@ -1,6 +1,6 @@
-use std::io::{self, BorrowedCursor, Bytes, Chain, IoSliceMut, Lines, Seek, Split, Take};
+use std::io::{self, BorrowedCursor, Bytes, Chain, IoSliceMut, Take};
 
-/// Equals the [`Read`] trait, except that everything is in reverse.
+/// Equals the [std::io::Read] trait, except that everything is in reverse.
 pub trait RevRead {
     fn rev_read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
 
