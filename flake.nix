@@ -27,7 +27,9 @@
               rust-toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
             in
             pkgs.mkShell {
-              packages = [ rust-toolchain ];
+              packages = with pkgs; [
+                cargo-release
+              ] ++ [ rust-toolchain ];
             };
         };
       };
