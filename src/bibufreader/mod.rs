@@ -2,67 +2,78 @@ use std::io::{self, BufRead, BufReader, Read, Seek};
 
 use crate::{RevBufRead, RevRead};
 
-#[derive(Debug)]
+use self::buffer::Buffer;
+
+mod buffer;
+
+// Bare metal platforms usually have very small amounts of RAM
+// (in the order of hundreds of KB)
+pub const DEFAULT_BUF_SIZE: usize = if cfg!(target_os = "espidf") {
+    512
+} else {
+    8 * 1024
+};
+
 pub struct BiBufReader<R> {
-    reader: BufReader<R>,
+    buf: buffer::Buffer,
+    inner: R,
 }
 
 impl<R: Read> BiBufReader<R> {
     pub fn buffer(&self) -> &[u8] {
-        self.reader.buffer()
+        self.buf.buffer()
     }
 
     pub fn capacity(&self) -> usize {
-        self.reader.capacity()
+        self.buf.capacity()
     }
 
     pub fn get_mut(&mut self) -> &mut R {
-        self.reader.get_mut()
+        &mut self.inner
     }
 
     pub fn get_ref(&self) -> &R {
-        self.reader.get_ref()
+        &self.inner
     }
 
     pub fn into_inner(self) -> R
     where
         R: Sized,
     {
-        self.reader.into_inner()
+        self.inner
     }
 
-    pub fn new(reader: R) -> Self {
-        Self {
-            reader: BufReader::new(reader),
-        }
+    pub fn new(inner: R) -> Self {
+        Self::with_capacity(DEFAULT_BUF_SIZE, inner)
     }
 
     pub fn with_capacity(capacity: usize, inner: R) -> Self {
         Self {
-            reader: BufReader::with_capacity(capacity, inner),
+            buf: Buffer::with_capacity(capacity),
+            inner,
         }
     }
 }
 
 impl<R: Seek> BiBufReader<R> {
     pub fn seek_relative(&mut self, offset: i64) -> io::Result<()> {
-        self.reader.seek_relative(offset)
+        todo!()
     }
 }
 
 impl<R: Read> Read for BiBufReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.reader.read(buf)
+        todo!()
     }
 }
 
 impl<R: Read> BufRead for BiBufReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        self.reader.fill_buf()
+        todo!()
     }
 
     fn consume(&mut self, amt: usize) {
-        self.reader.consume(amt)
+        todo!()
     }
 }
 

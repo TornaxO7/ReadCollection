@@ -1,4 +1,7 @@
 #![feature(core_io_borrowed_buf)]
+#![feature(new_uninit)]
+#![feature(maybe_uninit_slice)]
+#![feature(read_buf)]
 mod bibufreader;
 mod rev_buf_reader;
 mod rev_reader;
