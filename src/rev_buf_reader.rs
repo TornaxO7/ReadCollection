@@ -2,8 +2,10 @@ use std::io::{self, Lines, Split};
 
 use crate::RevRead;
 
+/// Equals the [std::io::BufRead] trait, except that everything is in reverse.
 pub trait RevBufRead: RevRead {
     fn rev_fill_buf(&mut self) -> io::Result<&[u8]>;
+
     fn rev_consume(&mut self, amt: usize);
 
     // Provided methods
