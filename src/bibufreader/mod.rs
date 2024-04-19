@@ -1,4 +1,4 @@
-use std::io::{self, BufRead, BufReader, Read, Seek};
+use std::io::{self, BufRead, Read, Seek};
 
 use crate::{RevBufRead, RevRead};
 
