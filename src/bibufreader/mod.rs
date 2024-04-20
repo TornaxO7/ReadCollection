@@ -111,7 +111,7 @@ impl<R: Read + Seek> RevRead for BiBufReader<R> {
             return Ok(amount_read);
         }
 
-        // otherwise: Refill the buffer
+        // otherwise: Refill the buffer, since our buffer is useless at the moment
         self.buf.discard_buffer();
         let added_content = self.rev_fill_buf()?;
         let i_start = added_content.len().saturating_sub(buf.len());
@@ -186,7 +186,7 @@ mod tests {
         }
     }
 
-    // #[test]
+    #[test]
     fn read_and_rev_read_basic() {
         let middle = DATA.len() / 2;
         let mut reader = BiBufReader::new(CURSOR_DATA);
@@ -201,7 +201,7 @@ mod tests {
 
         // read the next 3 values on the left from the middle
         assert_eq!(reader.rev_read(&mut rev_read_buffer).ok(), Some(3));
-        assert_eq!(rev_read_buffer, [2, 3, 4]);
+        assert_eq!(rev_read_buffer, [5, 6, 7]);
     }
 
     #[test]
