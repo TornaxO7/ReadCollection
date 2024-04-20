@@ -59,12 +59,6 @@ impl<R> BiBufReader<R> {
     }
 }
 
-impl<R: Seek> BiBufReader<R> {
-    pub fn seek_relative(&mut self, offset: i64) -> io::Result<()> {
-        todo!()
-    }
-}
-
 impl<R: Read> Read for BiBufReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let nothing_buffered = self.buf.pos() == self.buf.filled();
@@ -77,6 +71,7 @@ impl<R: Read> Read for BiBufReader<R> {
 
         let mut added_content = self.fill_buf()?;
         let amount_read = added_content.read(buf)?;
+        self.consume(amount_read);
         Ok(amount_read)
     }
 }
@@ -93,20 +88,36 @@ impl<R: Read> BufRead for BiBufReader<R> {
 
 impl<R: Read + Seek> RevRead for BiBufReader<R> {
     fn rev_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let curr_pos = self.inner.stream_position()?;
         let nothing_buffered = self.buf.pos() == 0;
         let buf_exceeds_internal_buffer = buf.len() >= self.capacity();
-        let curr_pos = self.inner.stream_position()? as i64;
-
         if nothing_buffered && buf_exceeds_internal_buffer {
-            // big read into the provided buffer
-            let offset = std::cmp::max(-curr_pos, -(buf.len() as i64));
+            // big read into the provided buffer, since we can't even buffer the big read
+            let offset = std::cmp::max(-(curr_pos as i64), -(buf.len() as i64));
+
             self.inner.seek(io::SeekFrom::Current(offset))?;
             return self.inner.read(buf);
         }
 
+        let internal_buffer_is_buffer_reuseable = self.buf.pos() >= buf.len();
+        if internal_buffer_is_buffer_reuseable {
+            // reuse the content of the internal buffer
+            let internal_buffer_content = self.buf.rev_buffer();
+
+            let mut relevant_part =
+                &internal_buffer_content[self.buf.pos().saturating_sub(buf.len())..self.buf.pos()];
+            let amount_read = relevant_part.read(buf)?;
+            self.rev_consume(amount_read);
+            return Ok(amount_read);
+        }
+
+        // otherwise: Refill the buffer
+        self.buf.discard_buffer();
         let added_content = self.rev_fill_buf()?;
-        let mut relevant_part = &added_content[added_content.len() - buf.len()..];
+        let i_start = added_content.len().saturating_sub(buf.len());
+        let mut relevant_part = &added_content[i_start..curr_pos as usize];
         let amount_read = relevant_part.read(buf)?;
+        self.rev_consume(amount_read);
         Ok(amount_read)
     }
 }
@@ -129,27 +140,79 @@ impl<R: Seek> Seek for BiBufReader<R> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::BufReader;
+
     use super::*;
 
     const DATA: [u8; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
     const CURSOR_DATA: io::Cursor<&[u8; 10]> = io::Cursor::new(&DATA);
 
-    #[test]
-    fn read() {
+    fn get_reader() -> BiBufReader<io::Cursor<&'static [u8; 10]>> {
+        BiBufReader::new(CURSOR_DATA)
+    }
+
+    mod read {
+        use super::*;
+
+        #[test]
+        fn basic() {
+            let mut reader = get_reader();
+            let mut buf1 = [0, 0, 0];
+            let mut buf2 = [0, 0, 0];
+
+            assert_eq!(reader.read(&mut buf1).ok(), Some(3));
+            assert_eq!(buf1, [0, 1, 2]);
+
+            assert_eq!(reader.read(&mut buf2).ok(), Some(3));
+            assert_eq!(buf2, [3, 4, 5]);
+        }
+    }
+
+    mod rev_read {
+        use super::*;
+
+        #[test]
+        fn basic() {
+            let mut reader = get_reader();
+            reader.seek(io::SeekFrom::End(0)).unwrap();
+            let mut buf1 = [0, 0, 0];
+            let mut buf2 = [0, 0, 0];
+
+            assert_eq!(reader.rev_read(&mut buf1).ok(), Some(3));
+            assert_eq!(buf1, [7, 8, 9]);
+
+            assert_eq!(reader.rev_read(&mut buf2).ok(), Some(3));
+            assert_eq!(buf2, [4, 5, 6]);
+        }
+    }
+
+    // #[test]
+    fn read_and_rev_read_basic() {
+        let middle = DATA.len() / 2;
         let mut reader = BiBufReader::new(CURSOR_DATA);
+        reader.seek(io::SeekFrom::Start(middle as u64)).unwrap();
+
+        let mut read_buffer = [0, 0, 0];
+        let mut rev_read_buffer = [0, 0, 0];
+
+        // read the next 3 values on the right from the middle
+        assert_eq!(reader.read(&mut read_buffer).ok(), Some(3));
+        assert_eq!(read_buffer, [5, 6, 7]);
+
+        // read the next 3 values on the left from the middle
+        assert_eq!(reader.rev_read(&mut rev_read_buffer).ok(), Some(3));
+        assert_eq!(rev_read_buffer, [2, 3, 4]);
+    }
+
+    #[test]
+    fn bruh() {
+        let mut reader = BufReader::new(CURSOR_DATA);
         let mut buffer = [0, 0, 0];
 
         assert_eq!(reader.read(&mut buffer).ok(), Some(3));
         assert_eq!(buffer, [0, 1, 2]);
-    }
 
-    #[test]
-    fn rev_read() {
-        let mut reader = BiBufReader::new(CURSOR_DATA);
-        reader.seek(io::SeekFrom::End(0)).unwrap();
-        let mut buffer = [0, 0, 0];
-
-        assert_eq!(reader.rev_read(&mut buffer).ok(), Some(3));
-        assert_eq!(buffer, [7, 8, 9]);
+        assert_eq!(reader.read(&mut buffer).ok(), Some(3));
+        assert_eq!(buffer, [3, 4, 5]);
     }
 }

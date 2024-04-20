@@ -92,7 +92,7 @@ impl Buffer {
 
     #[inline]
     pub fn rev_consume(&mut self, amt: usize) {
-        self.pos = cmp::min(0, self.pos - amt);
+        self.pos = self.pos.saturating_sub(amt);
     }
 
     /// If there are `amt` bytes available in the buffer, pass a slice containing those bytes to
@@ -152,6 +152,8 @@ impl Buffer {
 
             let mut buf = BorrowedBuf::from(&mut *self.buf);
             reader.read_buf(buf.unfilled())?;
+
+            reader.seek(SeekFrom::Start(pos as u64))?;
 
             self.pos = buf.len();
             self.filled = self.pos;
