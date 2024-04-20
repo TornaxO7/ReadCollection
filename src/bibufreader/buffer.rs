@@ -9,7 +9,7 @@
 /// that user code which wants to do reads from a `BufReader` via `buffer` + `consume` can do so
 /// without encountering any runtime bounds checks.
 use std::cmp;
-use std::io::{self, BorrowedBuf, Read};
+use std::io::{self, BorrowedBuf, Read, Seek, SeekFrom};
 use std::mem::MaybeUninit;
 
 pub struct Buffer {
@@ -48,6 +48,12 @@ impl Buffer {
     }
 
     #[inline]
+    pub fn rev_buffer(&self) -> &[u8] {
+        // SAFETY: It's always 0 <= self.pos <= self.filled
+        unsafe { MaybeUninit::slice_assume_init_ref(self.buf.get_unchecked(0..self.pos)) }
+    }
+
+    #[inline]
     pub fn is_exhausted(&self) -> bool {
         self.pos >= self.capacity()
     }
@@ -82,6 +88,11 @@ impl Buffer {
     #[inline]
     pub fn consume(&mut self, amt: usize) {
         self.pos = cmp::min(self.pos + amt, self.filled);
+    }
+
+    #[inline]
+    pub fn rev_consume(&mut self, amt: usize) {
+        self.pos = cmp::min(0, self.pos - amt);
     }
 
     /// If there are `amt` bytes available in the buffer, pass a slice containing those bytes to
@@ -128,5 +139,25 @@ impl Buffer {
             self.initialized = buf.init_len();
         }
         Ok(self.buffer())
+    }
+
+    #[inline]
+    pub fn rev_fill_buf(&mut self, mut reader: impl Read + Seek) -> io::Result<&[u8]> {
+        // nothing filled => fill the internal buffer
+        if self.filled == 0 {
+            let pos = reader.stream_position()? as i64;
+            let offset = std::cmp::max(-pos, -(self.capacity() as i64));
+
+            reader.seek(SeekFrom::Current(offset))?;
+
+            let mut buf = BorrowedBuf::from(&mut *self.buf);
+            reader.read_buf(buf.unfilled())?;
+
+            self.pos = buf.len();
+            self.filled = self.pos;
+            self.initialized = buf.init_len();
+        }
+
+        Ok(self.rev_buffer())
     }
 }

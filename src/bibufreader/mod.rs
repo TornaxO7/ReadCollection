@@ -1,4 +1,4 @@
-use std::io::{self, BufRead, BufReader, Read, Seek};
+use std::io::{self, BufRead, Read, Seek};
 
 use crate::{RevBufRead, RevRead};
 
@@ -91,25 +91,39 @@ impl<R: Read> BufRead for BiBufReader<R> {
     }
 }
 
-impl<R: Seek> RevRead for BiBufReader<R> {
+impl<R: Read + Seek> RevRead for BiBufReader<R> {
     fn rev_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        todo!()
+        let nothing_buffered = self.buf.pos() == 0;
+        let buf_exceeds_internal_buffer = buf.len() >= self.capacity();
+        let curr_pos = self.inner.stream_position()? as i64;
+
+        if nothing_buffered && buf_exceeds_internal_buffer {
+            // big read into the provided buffer
+            let offset = std::cmp::max(-curr_pos, -(buf.len() as i64));
+            self.inner.seek(io::SeekFrom::Current(offset))?;
+            return self.inner.read(buf);
+        }
+
+        let added_content = self.rev_fill_buf()?;
+        let mut relevant_part = &added_content[added_content.len() - buf.len()..];
+        let amount_read = relevant_part.read(buf)?;
+        Ok(amount_read)
     }
 }
 
-impl<R: Seek> RevBufRead for BiBufReader<R> {
+impl<R: Read + Seek> RevBufRead for BiBufReader<R> {
     fn rev_fill_buf(&mut self) -> io::Result<&[u8]> {
-        todo!()
+        self.buf.rev_fill_buf(&mut self.inner)
     }
 
     fn rev_consume(&mut self, amt: usize) {
-        todo!()
+        self.buf.rev_consume(amt)
     }
 }
 
 impl<R: Seek> Seek for BiBufReader<R> {
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
-        todo!()
+        self.inner.seek(pos)
     }
 }
 
@@ -118,11 +132,11 @@ mod tests {
     use super::*;
 
     const DATA: [u8; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const CURSOR_DATA: io::Cursor<&[u8; 10]> = io::Cursor::new(&DATA);
 
     #[test]
     fn read() {
-        let inner = io::Cursor::new(&DATA);
-        let mut reader = BiBufReader::new(inner);
+        let mut reader = BiBufReader::new(CURSOR_DATA);
         let mut buffer = [0, 0, 0];
 
         assert_eq!(reader.read(&mut buffer).ok(), Some(3));
@@ -131,8 +145,7 @@ mod tests {
 
     #[test]
     fn rev_read() {
-        let inner = io::Cursor::new(&DATA);
-        let mut reader = BiBufReader::new(inner);
+        let mut reader = BiBufReader::new(CURSOR_DATA);
         reader.seek(io::SeekFrom::End(0)).unwrap();
         let mut buffer = [0, 0, 0];
 
