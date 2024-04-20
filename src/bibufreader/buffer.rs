@@ -8,6 +8,7 @@
 /// `pos..filled` is always a valid index into the initialized region of the buffer. This means
 /// that user code which wants to do reads from a `BufReader` via `buffer` + `consume` can do so
 /// without encountering any runtime bounds checks.
+use std::cmp;
 use std::io::{self, BorrowedBuf, Read};
 use std::mem::MaybeUninit;
 
@@ -15,8 +16,7 @@ pub struct Buffer {
     // The buffer.
     buf: Box<[MaybeUninit<u8>]>,
     // The current seek offset into `buf`, must always be <= `filled`.
-    left: usize,
-    right: usize,
+    pos: usize,
     // Each call to `fill_buf` sets `filled` to indicate how many bytes at the start of `buf` are
     // initialized with bytes from a read.
     filled: usize,
@@ -34,10 +34,9 @@ impl Buffer {
         let buf = Box::new_uninit_slice(capacity);
         Self {
             buf,
-            right: 0,
-            left: 0,
-            initialized: 0,
+            pos: 0,
             filled: 0,
+            initialized: 0,
         }
     }
 
@@ -45,7 +44,12 @@ impl Buffer {
     pub fn buffer(&self) -> &[u8] {
         // SAFETY: self.pos and self.cap are valid, and self.cap => self.pos, and
         // that region is initialized because those are all invariants of this type.
-        unsafe { MaybeUninit::slice_assume_init_ref(self.buf.get_unchecked(self.left..self.right)) }
+        unsafe { MaybeUninit::slice_assume_init_ref(self.buf.get_unchecked(self.pos..self.filled)) }
+    }
+
+    #[inline]
+    pub fn is_exhausted(&self) -> bool {
+        self.pos >= self.capacity()
     }
 
     #[inline]
@@ -55,17 +59,12 @@ impl Buffer {
 
     #[inline]
     pub fn filled(&self) -> usize {
-        self.right - self.left
+        self.filled
     }
 
     #[inline]
-    pub fn right(&self) -> usize {
-        self.right
-    }
-
-    #[inline]
-    pub fn left(&self) -> usize {
-        self.left
+    pub fn pos(&self) -> usize {
+        self.pos
     }
 
     // This is only used by a test which asserts that the initialization-tracking is correct.
@@ -76,36 +75,36 @@ impl Buffer {
 
     #[inline]
     pub fn discard_buffer(&mut self) {
-        self.left = 0;
-        self.right = 0;
+        self.pos = 0;
+        self.filled = 0;
     }
 
-    // #[inline]
-    // pub fn consume(&mut self, amt: usize) {
-    //     self.pos = cmp::min(self.pos + amt, self.filled);
-    // }
+    #[inline]
+    pub fn consume(&mut self, amt: usize) {
+        self.pos = cmp::min(self.pos + amt, self.filled);
+    }
 
     /// If there are `amt` bytes available in the buffer, pass a slice containing those bytes to
     /// `visitor` and return true. If there are not enough bytes available, return false.
-    // #[inline]
-    // pub fn consume_with<V>(&mut self, amt: usize, mut visitor: V) -> bool
-    // where
-    //     V: FnMut(&[u8]),
-    // {
-    //     if let Some(claimed) = self.buffer().get(..amt) {
-    //         visitor(claimed);
-    //         // If the indexing into self.buffer() succeeds, amt must be a valid increment.
-    //         self.pos += amt;
-    //         true
-    //     } else {
-    //         false
-    //     }
-    // }
+    #[inline]
+    pub fn consume_with<V>(&mut self, amt: usize, mut visitor: V) -> bool
+    where
+        V: FnMut(&[u8]),
+    {
+        if let Some(claimed) = self.buffer().get(..amt) {
+            visitor(claimed);
+            // If the indexing into self.buffer() succeeds, amt must be a valid increment.
+            self.pos += amt;
+            true
+        } else {
+            false
+        }
+    }
 
-    // #[inline]
-    // pub fn unconsume(&mut self, amt: usize) {
-    //     self.pos = self.pos.saturating_sub(amt);
-    // }
+    #[inline]
+    pub fn unconsume(&mut self, amt: usize) {
+        self.pos = self.pos.saturating_sub(amt);
+    }
 
     #[inline]
     pub fn fill_buf(&mut self, mut reader: impl Read) -> io::Result<&[u8]> {
