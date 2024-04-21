@@ -343,16 +343,29 @@ mod tests {
 
         #[test]
         fn append() {
-            let mut data = [1, 2, 3];
-            let mut buf = RevBorrowedBuf::from(data.as_mut_slice());
+            let mut buffer = [1, 2, 3];
+            let mut buf = RevBorrowedBuf::from(buffer.as_mut_slice());
 
-            let append_data = [4, 5];
+            let data = [4, 5];
             let mut cursor = buf.unfilled();
-            cursor.append(&append_data);
+            cursor.append(&data);
 
-            assert_eq!(cursor.written(), append_data.len());
+            assert_eq!(cursor.written(), data.len());
             assert_eq!(cursor.init_ref(), [1, 4, 5]);
             assert_eq!(cursor.capacity(), 1);
+        }
+
+        #[test]
+        #[should_panic]
+        fn append_panic() {
+            let mut buffer: [u8; 0] = [];
+            let mut buf = RevBorrowedBuf::from(buffer.as_mut_slice());
+
+            let data = [4, 5];
+            let mut cursor = buf.unfilled();
+
+            // capacity < data.len()!!!! => Panic
+            cursor.append(&data);
         }
     }
 }
