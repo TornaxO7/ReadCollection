@@ -54,11 +54,6 @@ impl Buffer {
     }
 
     #[inline]
-    pub fn is_exhausted(&self) -> bool {
-        self.pos >= self.capacity()
-    }
-
-    #[inline]
     pub fn capacity(&self) -> usize {
         self.buf.len()
     }
@@ -71,12 +66,6 @@ impl Buffer {
     #[inline]
     pub fn pos(&self) -> usize {
         self.pos
-    }
-
-    // This is only used by a test which asserts that the initialization-tracking is correct.
-    #[cfg(test)]
-    pub fn initialized(&self) -> usize {
-        self.initialized
     }
 
     #[inline]
@@ -110,11 +99,6 @@ impl Buffer {
         } else {
             false
         }
-    }
-
-    #[inline]
-    pub fn unconsume(&mut self, amt: usize) {
-        self.pos = self.pos.saturating_sub(amt);
     }
 
     #[inline]
@@ -161,5 +145,40 @@ impl Buffer {
         }
 
         Ok(self.rev_buffer())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use super::*;
+
+    #[test]
+    fn valid_invariants_after_consume_with_empty_buf() {
+        let mut buf = Buffer::with_capacity(0);
+        buf.consume(1);
+
+        assert_eq!(buf.pos(), 0);
+        assert_eq!(buf.filled(), 0);
+    }
+
+    #[test]
+    fn valid_invariants_after_unconsume_with_empty_buf() {
+        let mut buf = Buffer::with_capacity(0);
+        buf.rev_consume(1);
+
+        assert_eq!(buf.pos(), 0);
+        assert_eq!(buf.filled(), 0);
+    }
+
+    #[test]
+    fn valid_invariants_after_filling() {
+        let data = [1, 2, 3];
+        let mut buf = Buffer::with_capacity(2);
+
+        buf.fill_buf(data.as_slice()).unwrap();
+        assert_eq!(buf.pos, 0);
+        assert_eq!(buf.filled, 2);
     }
 }

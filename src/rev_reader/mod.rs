@@ -1,4 +1,6 @@
-use std::io::{self, Bytes, Chain, IoSliceMut, Take};
+use std::io::{self, BorrowedCursor, Bytes, Chain, IoSliceMut, Take};
+
+mod impls;
 
 /// Equals the [std::io::Read] trait, except that everything is in reverse.
 pub trait RevRead {
@@ -19,12 +21,12 @@ pub trait RevRead {
     fn rev_read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
         todo!()
     }
-    // fn rev_read_buf(&mut self, buf: BorrowedCursor<'_>) -> io::Result<()> {
-    //     todo!()
-    // }
-    // fn rev_read_buf_exact(&mut self, cursor: BorrowedCursor<'_>) -> io::Result<()> {
-    //     todo!()
-    // }
+    fn rev_read_buf(&mut self, buf: BorrowedCursor<'_>) -> io::Result<()> {
+        todo!()
+    }
+    fn rev_read_buf_exact(&mut self, cursor: BorrowedCursor<'_>) -> io::Result<()> {
+        todo!()
+    }
     fn rev_by_ref(&mut self) -> &mut Self
     where
         Self: Sized,

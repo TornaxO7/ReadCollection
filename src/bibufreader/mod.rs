@@ -14,14 +14,6 @@ pub const DEFAULT_BUF_SIZE: usize = if cfg!(target_os = "espidf") {
     8 * 1024
 };
 
-/// # Use case
-/// Use this struct, if:
-///   - you read back and forth in a limited section
-///
-/// # Non use case
-/// Don't use this struct, if:
-///   - you are reading a lot in only one direction (either back or forth). Use [`std::io::BufReader`] or [RevBufReader] for this
-///     since they will buffer more from their reading direction
 pub struct BiBufReader<R> {
     buf: Buffer,
     inner: R,
@@ -111,11 +103,12 @@ impl<R: Read + Seek> RevRead for BiBufReader<R> {
             return Ok(amount_read);
         }
 
-        // otherwise: Refill the buffer, since our buffer is useless at the moment
+        // otherwise: buffer the content on the left from the current position
         self.buf.discard_buffer();
         let added_content = self.rev_fill_buf()?;
-        let i_start = added_content.len().saturating_sub(buf.len());
-        let mut relevant_part = &added_content[i_start..curr_pos as usize];
+        debug_assert!(buf.len() <= added_content.len());
+        let start = added_content.len().saturating_sub(buf.len());
+        let mut relevant_part = &added_content[start..];
         let amount_read = relevant_part.read(buf)?;
         self.rev_consume(amount_read);
         Ok(amount_read)
@@ -140,8 +133,6 @@ impl<R: Seek> Seek for BiBufReader<R> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::BufReader;
-
     use super::*;
 
     const DATA: [u8; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -151,20 +142,55 @@ mod tests {
         BiBufReader::new(CURSOR_DATA)
     }
 
-    mod read {
+    mod bibufreader_equals_bufreader {
+        use std::io::BufReader;
+
         use super::*;
 
         #[test]
-        fn basic() {
+        fn with_elements() {
+            let mut tester = BufReader::new(CURSOR_DATA);
             let mut reader = get_reader();
             let mut buf1 = [0, 0, 0];
             let mut buf2 = [0, 0, 0];
 
-            assert_eq!(reader.read(&mut buf1).ok(), Some(3));
-            assert_eq!(buf1, [0, 1, 2]);
+            assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
+            assert_eq!(buf1, buf2);
 
-            assert_eq!(reader.read(&mut buf2).ok(), Some(3));
-            assert_eq!(buf2, [3, 4, 5]);
+            assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
+            assert_eq!(buf1, buf2);
+        }
+
+        #[test]
+        fn with_empty_data() {
+            let data: Vec<u8> = vec![];
+            let mut tester = BufReader::new(data.as_slice());
+            let mut reader = BiBufReader::new(data.as_slice());
+
+            let mut buf1 = [0, 0, 0];
+            let mut buf2 = [0, 0, 0];
+
+            assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
+            assert_eq!(buf1, buf2);
+        }
+
+        #[test]
+        fn with_discarding() {
+            let data: Vec<u8> = vec![1, 2, 3];
+            let mut tester = BufReader::new(data.as_slice());
+            let mut reader = BiBufReader::new(data.as_slice());
+
+            let mut buf1 = [0, 0];
+            let mut buf2 = [0, 0];
+
+            assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
+            assert_eq!(buf1, [1, 2]);
+            assert_eq!(buf1, buf2);
+
+            // we discarded the buffer and add the next value to the first index
+            assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
+            assert_eq!(buf1, [3, 2]);
+            assert_eq!(buf1, buf2);
         }
     }
 
@@ -172,17 +198,29 @@ mod tests {
         use super::*;
 
         #[test]
-        fn basic() {
+        fn with_elements() {
             let mut reader = get_reader();
             reader.seek(io::SeekFrom::End(0)).unwrap();
-            let mut buf1 = [0, 0, 0];
-            let mut buf2 = [0, 0, 0];
+            let mut buffer = [0, 0, 0];
 
-            assert_eq!(reader.rev_read(&mut buf1).ok(), Some(3));
-            assert_eq!(buf1, [7, 8, 9]);
+            assert_eq!(reader.rev_read(&mut buffer).ok(), Some(3));
+            assert_eq!(buffer, [7, 8, 9]);
 
-            assert_eq!(reader.rev_read(&mut buf2).ok(), Some(3));
-            assert_eq!(buf2, [4, 5, 6]);
+            assert_eq!(reader.rev_read(&mut buffer).ok(), Some(3));
+            assert_eq!(buffer, [4, 5, 6]);
+        }
+
+        #[test]
+        fn with_discarding() {
+            let data: Vec<u8> = vec![1, 2, 3];
+            let mut reader = BiBufReader::new(io::Cursor::new(data.as_slice()));
+            let mut buffer = [0, 0];
+
+            assert_eq!(reader.rev_read(&mut buffer).ok(), Some(2));
+            assert_eq!(buffer, [2, 3]);
+
+            assert_eq!(reader.rev_read(&mut buffer).ok(), Some(1));
+            assert_eq!(buffer, [2, 1]);
         }
     }
 
@@ -199,20 +237,8 @@ mod tests {
         assert_eq!(reader.read(&mut read_buffer).ok(), Some(3));
         assert_eq!(read_buffer, [5, 6, 7]);
 
-        // read the next 3 values on the left from the middle
+        // re-read the just 3 elements which we read
         assert_eq!(reader.rev_read(&mut rev_read_buffer).ok(), Some(3));
         assert_eq!(rev_read_buffer, [5, 6, 7]);
-    }
-
-    #[test]
-    fn bruh() {
-        let mut reader = BufReader::new(CURSOR_DATA);
-        let mut buffer = [0, 0, 0];
-
-        assert_eq!(reader.read(&mut buffer).ok(), Some(3));
-        assert_eq!(buffer, [0, 1, 2]);
-
-        assert_eq!(reader.read(&mut buffer).ok(), Some(3));
-        assert_eq!(buffer, [3, 4, 5]);
     }
 }
