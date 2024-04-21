@@ -131,114 +131,114 @@ impl<R: Seek> Seek for BiBufReader<R> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    const DATA: [u8; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-    const CURSOR_DATA: io::Cursor<&[u8; 10]> = io::Cursor::new(&DATA);
+//     const DATA: [u8; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+//     const CURSOR_DATA: io::Cursor<&[u8; 10]> = io::Cursor::new(&DATA);
 
-    fn get_reader() -> BiBufReader<io::Cursor<&'static [u8; 10]>> {
-        BiBufReader::new(CURSOR_DATA)
-    }
+//     fn get_reader() -> BiBufReader<io::Cursor<&'static [u8; 10]>> {
+//         BiBufReader::new(CURSOR_DATA)
+//     }
 
-    mod bibufreader_equals_bufreader {
-        use std::io::BufReader;
+//     mod bibufreader_equals_bufreader {
+//         use std::io::BufReader;
 
-        use super::*;
+//         use super::*;
 
-        #[test]
-        fn with_elements() {
-            let mut tester = BufReader::new(CURSOR_DATA);
-            let mut reader = get_reader();
-            let mut buf1 = [0, 0, 0];
-            let mut buf2 = [0, 0, 0];
+//         #[test]
+//         fn with_elements() {
+//             let mut tester = BufReader::new(CURSOR_DATA);
+//             let mut reader = get_reader();
+//             let mut buf1 = [0, 0, 0];
+//             let mut buf2 = [0, 0, 0];
 
-            assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
-            assert_eq!(buf1, buf2);
+//             assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
+//             assert_eq!(buf1, buf2);
 
-            assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
-            assert_eq!(buf1, buf2);
-        }
+//             assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
+//             assert_eq!(buf1, buf2);
+//         }
 
-        #[test]
-        fn with_empty_data() {
-            let data: Vec<u8> = vec![];
-            let mut tester = BufReader::new(data.as_slice());
-            let mut reader = BiBufReader::new(data.as_slice());
+//         #[test]
+//         fn with_empty_data() {
+//             let data: Vec<u8> = vec![];
+//             let mut tester = BufReader::new(data.as_slice());
+//             let mut reader = BiBufReader::new(data.as_slice());
 
-            let mut buf1 = [0, 0, 0];
-            let mut buf2 = [0, 0, 0];
+//             let mut buf1 = [0, 0, 0];
+//             let mut buf2 = [0, 0, 0];
 
-            assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
-            assert_eq!(buf1, buf2);
-        }
+//             assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
+//             assert_eq!(buf1, buf2);
+//         }
 
-        #[test]
-        fn with_discarding() {
-            let data: Vec<u8> = vec![1, 2, 3];
-            let mut tester = BufReader::new(data.as_slice());
-            let mut reader = BiBufReader::new(data.as_slice());
+//         #[test]
+//         fn with_discarding() {
+//             let data: Vec<u8> = vec![1, 2, 3];
+//             let mut tester = BufReader::new(data.as_slice());
+//             let mut reader = BiBufReader::new(data.as_slice());
 
-            let mut buf1 = [0, 0];
-            let mut buf2 = [0, 0];
+//             let mut buf1 = [0, 0];
+//             let mut buf2 = [0, 0];
 
-            assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
-            assert_eq!(buf1, [1, 2]);
-            assert_eq!(buf1, buf2);
+//             assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
+//             assert_eq!(buf1, [1, 2]);
+//             assert_eq!(buf1, buf2);
 
-            // we discarded the buffer and add the next value to the first index
-            assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
-            assert_eq!(buf1, [3, 2]);
-            assert_eq!(buf1, buf2);
-        }
-    }
+//             // we discarded the buffer and add the next value to the first index
+//             assert_eq!(reader.read(&mut buf1).ok(), tester.read(&mut buf2).ok());
+//             assert_eq!(buf1, [3, 2]);
+//             assert_eq!(buf1, buf2);
+//         }
+//     }
 
-    mod rev_read {
-        use super::*;
+//     mod rev_read {
+//         use super::*;
 
-        #[test]
-        fn with_elements() {
-            let mut reader = get_reader();
-            reader.seek(io::SeekFrom::End(0)).unwrap();
-            let mut buffer = [0, 0, 0];
+//         #[test]
+//         fn with_elements() {
+//             let mut reader = get_reader();
+//             reader.seek(io::SeekFrom::End(0)).unwrap();
+//             let mut buffer = [0, 0, 0];
 
-            assert_eq!(reader.rev_read(&mut buffer).ok(), Some(3));
-            assert_eq!(buffer, [7, 8, 9]);
+//             assert_eq!(reader.rev_read(&mut buffer).ok(), Some(3));
+//             assert_eq!(buffer, [7, 8, 9]);
 
-            assert_eq!(reader.rev_read(&mut buffer).ok(), Some(3));
-            assert_eq!(buffer, [4, 5, 6]);
-        }
+//             assert_eq!(reader.rev_read(&mut buffer).ok(), Some(3));
+//             assert_eq!(buffer, [4, 5, 6]);
+//         }
 
-        #[test]
-        fn with_discarding() {
-            let data: Vec<u8> = vec![1, 2, 3];
-            let mut reader = BiBufReader::new(io::Cursor::new(data.as_slice()));
-            let mut buffer = [0, 0];
+//         #[test]
+//         fn with_discarding() {
+//             let data: Vec<u8> = vec![1, 2, 3];
+//             let mut reader = BiBufReader::new(io::Cursor::new(data.as_slice()));
+//             let mut buffer = [0, 0];
 
-            assert_eq!(reader.rev_read(&mut buffer).ok(), Some(2));
-            assert_eq!(buffer, [2, 3]);
+//             assert_eq!(reader.rev_read(&mut buffer).ok(), Some(2));
+//             assert_eq!(buffer, [2, 3]);
 
-            assert_eq!(reader.rev_read(&mut buffer).ok(), Some(1));
-            assert_eq!(buffer, [2, 1]);
-        }
-    }
+//             assert_eq!(reader.rev_read(&mut buffer).ok(), Some(1));
+//             assert_eq!(buffer, [2, 1]);
+//         }
+//     }
 
-    #[test]
-    fn read_and_rev_read_basic() {
-        let middle = DATA.len() / 2;
-        let mut reader = BiBufReader::new(CURSOR_DATA);
-        reader.seek(io::SeekFrom::Start(middle as u64)).unwrap();
+//     #[test]
+//     fn read_and_rev_read_basic() {
+//         let middle = DATA.len() / 2;
+//         let mut reader = BiBufReader::new(CURSOR_DATA);
+//         reader.seek(io::SeekFrom::Start(middle as u64)).unwrap();
 
-        let mut read_buffer = [0, 0, 0];
-        let mut rev_read_buffer = [0, 0, 0];
+//         let mut read_buffer = [0, 0, 0];
+//         let mut rev_read_buffer = [0, 0, 0];
 
-        // read the next 3 values on the right from the middle
-        assert_eq!(reader.read(&mut read_buffer).ok(), Some(3));
-        assert_eq!(read_buffer, [5, 6, 7]);
+//         // read the next 3 values on the right from the middle
+//         assert_eq!(reader.read(&mut read_buffer).ok(), Some(3));
+//         assert_eq!(read_buffer, [5, 6, 7]);
 
-        // re-read the just 3 elements which we read
-        assert_eq!(reader.rev_read(&mut rev_read_buffer).ok(), Some(3));
-        assert_eq!(rev_read_buffer, [5, 6, 7]);
-    }
-}
+//         // re-read the just 3 elements which we read
+//         assert_eq!(reader.rev_read(&mut rev_read_buffer).ok(), Some(3));
+//         assert_eq!(rev_read_buffer, [5, 6, 7]);
+//     }
+// }

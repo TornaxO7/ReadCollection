@@ -18,19 +18,6 @@ impl RevRead for &[u8] {
         *self = head;
         Ok(offset)
     }
-
-    fn rev_read_buf_exact(
-        &mut self,
-        mut cursor: std::io::BorrowedCursor<'_>,
-    ) -> std::io::Result<()> {
-        let amount = std::cmp::min(self.len(), cursor.capacity());
-        let (head, tail) = self.split_at(amount);
-
-        cursor.append(tail);
-
-        *self = head;
-        Ok(())
-    }
 }
 
 #[cfg(test)]

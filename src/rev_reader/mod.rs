@@ -1,4 +1,6 @@
-use std::io::{self, BorrowedCursor, Bytes, Chain, IoSliceMut, Take};
+use std::io::{self, Bytes, Chain, IoSliceMut, Take};
+
+use crate::rev_borrowed_buf::RevBorrowedCursor;
 
 mod impls;
 
@@ -21,10 +23,10 @@ pub trait RevRead {
     fn rev_read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
         todo!()
     }
-    fn rev_read_buf(&mut self, buf: BorrowedCursor<'_>) -> io::Result<()> {
+    fn rev_read_buf(&mut self, buf: RevBorrowedCursor<'_>) -> io::Result<()> {
         todo!()
     }
-    fn rev_read_buf_exact(&mut self, cursor: BorrowedCursor<'_>) -> io::Result<()> {
+    fn rev_read_buf_exact(&mut self, cursor: RevBorrowedCursor<'_>) -> io::Result<()> {
         todo!()
     }
     fn rev_by_ref(&mut self) -> &mut Self
