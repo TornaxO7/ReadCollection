@@ -28,9 +28,9 @@ use std::{cmp, ptr};
 pub struct RevBorrowedBuf<'data> {
     /// The buffer's underlying data.
     buf: &'data mut [MaybeUninit<u8>],
-    /// The length of `self.buf` which is known to be filled.
+    /// The starting index (inclusively) where the values are filled
     filled: usize,
-    /// The length of `self.buf` which is known to be initialized.
+    /// The starting index (inclusively) where the values are initialized
     init: usize,
 }
 
@@ -43,8 +43,8 @@ impl<'data> From<&'data mut [u8]> for RevBorrowedBuf<'data> {
         RevBorrowedBuf {
             // SAFETY: initialized data never becoming uninitialized is an invariant of BorrowedBuf
             buf: unsafe { (slice as *mut [u8]).as_uninit_slice_mut().unwrap() },
-            filled: 0,
-            init: len,
+            filled: len,
+            init: 0,
         }
     }
 }
@@ -55,10 +55,11 @@ impl<'data> From<&'data mut [u8]> for RevBorrowedBuf<'data> {
 impl<'data> From<&'data mut [MaybeUninit<u8>]> for RevBorrowedBuf<'data> {
     #[inline]
     fn from(buf: &'data mut [MaybeUninit<u8>]) -> RevBorrowedBuf<'data> {
+        let len = buf.len();
         RevBorrowedBuf {
             buf,
-            filled: 0,
-            init: 0,
+            filled: len,
+            init: len,
         }
     }
 }
@@ -73,29 +74,27 @@ impl<'data> RevBorrowedBuf<'data> {
     /// Returns the amount of bytes which are filled.
     #[inline]
     pub fn len(&self) -> usize {
-        self.filled
+        self.capacity() - self.filled
     }
 
     /// Returns the amount of bytes of the initialized part of the buffer.
     #[inline]
     pub fn init_len(&self) -> usize {
-        self.init
+        self.capacity() - self.init
     }
 
     /// Returns a shared reference to the filled portion of the buffer.
     #[inline]
     pub fn filled(&self) -> &[u8] {
-        let norm_filled = self.normalized_filled();
         // SAFETY: We only slice the filled part of the buffer, which is always valid
-        unsafe { MaybeUninit::slice_assume_init_ref(&self.buf[norm_filled..]) }
+        unsafe { MaybeUninit::slice_assume_init_ref(&self.buf[self.filled..]) }
     }
 
     /// Returns a mutable reference to the filled portion of the buffer.
     #[inline]
     pub fn filled_mut(&mut self) -> &mut [u8] {
-        let norm_filled = self.normalized_filled();
         // SAFETY: We only slice the filled part of the buffer, which is always valid
-        unsafe { MaybeUninit::slice_assume_init_mut(&mut self.buf[norm_filled..]) }
+        unsafe { MaybeUninit::slice_assume_init_mut(&mut self.buf[self.filled..]) }
     }
 
     /// Returns a cursor over the unfilled part of the buffer.
@@ -118,11 +117,11 @@ impl<'data> RevBorrowedBuf<'data> {
     /// The number of initialized bytes is not changed, and the contents of the buffer are not modified.
     #[inline]
     pub fn clear(&mut self) -> &mut Self {
-        self.filled = 0;
+        self.filled = self.capacity();
         self
     }
 
-    /// Asserts that the last `n` bytes of the buffer are initialized.
+    /// Asserts that all bytes on the left (inclusive) to index `n` are initialised.
     ///
     /// `RevBorrowedBuf` assumes that bytes are never de-initialized, so this method does nothing when called with fewer
     /// bytes than are already known to be initialized.
@@ -132,22 +131,8 @@ impl<'data> RevBorrowedBuf<'data> {
     /// The caller must ensure that the last `n` unfilled bytes of the buffer have already been initialized.
     #[inline]
     pub unsafe fn set_init(&mut self, n: usize) -> &mut Self {
-        self.init = cmp::max(self.init, n);
+        self.init = cmp::min(self.init, n);
         self
-    }
-
-    /// Calculates the index where it's guaranteed that all values, starting from the returned value
-    /// are filled values.
-    #[inline]
-    fn normalized_filled(&self) -> usize {
-        self.capacity() - self.filled
-    }
-
-    /// Calculates the index where it's guaranteede that all values, starting inclusively from the
-    /// returned value are initialised.
-    #[inline]
-    fn normalized_init(&self) -> usize {
-        self.capacity() - self.init
     }
 }
 
@@ -200,7 +185,7 @@ impl<'a> RevBorrowedCursor<'a> {
     /// Returns the available space in the cursor.
     #[inline]
     pub fn capacity(&self) -> usize {
-        self.buf.capacity() - self.buf.filled
+        self.buf.filled
     }
 
     /// Returns the number of bytes written to this cursor since it was created from a `RevBorrowedBuf`.
@@ -215,23 +200,19 @@ impl<'a> RevBorrowedCursor<'a> {
     /// Returns a shared reference to the initialized portion of the cursor.
     #[inline]
     pub fn init_ref(&self) -> &[u8] {
-        let norm_filled = self.buf.normalized_filled();
-        let norm_init = self.buf.normalized_init();
-        debug_assert!(norm_init <= norm_filled);
+        debug_assert!(self.buf.init <= self.buf.filled);
 
         // SAFETY: We only slice the initialized part of the buffer, which is always valid
-        unsafe { MaybeUninit::slice_assume_init_ref(&self.buf.buf[norm_init..norm_filled]) }
+        unsafe { MaybeUninit::slice_assume_init_ref(&self.buf.buf[self.buf.init..]) }
     }
 
     /// Returns a mutable reference to the initialized portion of the cursor.
     #[inline]
     pub fn init_mut(&mut self) -> &mut [u8] {
-        let norm_filled = self.buf.normalized_filled();
-        let norm_init = self.buf.normalized_init();
-        debug_assert!(norm_init <= norm_filled);
+        debug_assert!(self.buf.init <= self.buf.filled);
 
         // SAFETY: We only slice the initialized part of the buffer, which is always valid
-        unsafe { MaybeUninit::slice_assume_init_mut(&mut self.buf.buf[norm_init..norm_filled]) }
+        unsafe { MaybeUninit::slice_assume_init_mut(&mut self.buf.buf[self.buf.init..]) }
     }
 
     /// Returns a mutable reference to the uninitialized part of the cursor.
@@ -239,8 +220,7 @@ impl<'a> RevBorrowedCursor<'a> {
     /// It is safe to uninitialize any of these bytes.
     #[inline]
     pub fn uninit_mut(&mut self) -> &mut [MaybeUninit<u8>] {
-        let norm_init = self.buf.normalized_init();
-        &mut self.buf.buf[..norm_init]
+        &mut self.buf.buf[..self.buf.init]
     }
 
     /// Returns a mutable reference to the whole cursor.
@@ -250,8 +230,7 @@ impl<'a> RevBorrowedCursor<'a> {
     /// The caller must not uninitialize any bytes in the initialized portion of the cursor.
     #[inline]
     pub unsafe fn as_mut(&mut self) -> &mut [MaybeUninit<u8>] {
-        let norm_filled = self.buf.normalized_filled();
-        &mut self.buf.buf[norm_filled..]
+        &mut self.buf.buf[..self.buf.filled]
     }
 
     /// Advance the cursor by asserting that `n` bytes have been filled.
@@ -266,8 +245,8 @@ impl<'a> RevBorrowedCursor<'a> {
     /// initialised.
     #[inline]
     pub unsafe fn advance(&mut self, n: usize) -> &mut Self {
-        self.buf.filled += n;
-        self.buf.init = cmp::max(self.buf.init, self.buf.filled);
+        self.buf.filled -= n;
+        self.buf.init = cmp::min(self.buf.init, self.buf.filled);
         self
     }
 
@@ -280,7 +259,7 @@ impl<'a> RevBorrowedCursor<'a> {
         unsafe {
             ptr::write_bytes(uninit.as_mut_ptr(), 0, uninit.len());
         }
-        self.buf.init = self.buf.capacity();
+        self.buf.init = 0;
 
         self
     }
@@ -295,7 +274,7 @@ impl<'a> RevBorrowedCursor<'a> {
     /// The caller must ensure that the first `n` bytes of the buffer have already been initialized.
     #[inline]
     pub unsafe fn set_init(&mut self, n: usize) -> &mut Self {
-        self.buf.init = cmp::max(self.buf.init, self.buf.filled + n);
+        self.buf.init = cmp::min(self.buf.init, self.buf.filled - n);
         self
     }
 
@@ -311,12 +290,69 @@ impl<'a> RevBorrowedCursor<'a> {
         // SAFETY: we do not de-initialize any of the elements of the slice
         let mut_init_slice = unsafe { self.as_mut() };
         let mut_init_slice_len = mut_init_slice.len();
-        MaybeUninit::copy_from_slice(&mut mut_init_slice[mut_init_slice_len - buf.len()..], buf);
+        MaybeUninit::copy_from_slice(
+            &mut mut_init_slice[mut_init_slice_len.saturating_sub(buf.len())..],
+            buf,
+        );
 
         // SAFETY: We just added the entire contents of buf to the filled section.
         unsafe {
             self.set_init(buf.len());
         }
-        self.buf.filled += buf.len();
+        self.buf.filled -= buf.len();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod rev_borrowed_buf {
+        use super::*;
+
+        #[test]
+        fn filled() {
+            let mut data = [1, 2, 3];
+            let mut buf = RevBorrowedBuf::from(data.as_mut_slice());
+
+            // assume, we filled one value
+            buf.filled -= 1;
+            assert_eq!(buf.filled(), [3]);
+
+            // assume, we filled two values
+            buf.filled -= 1;
+            assert_eq!(buf.filled(), [2, 3]);
+        }
+    }
+
+    mod rev_borrowed_cursor {
+        use super::*;
+
+        #[test]
+        fn capacity() {
+            let mut data = [1, 2, 3];
+            let mut buf = RevBorrowedBuf::from(data.as_mut_slice());
+
+            // assume, we filled one value
+            buf.filled -= 1;
+            let cursor = buf.unfilled();
+
+            // one value has been written to in the buffer => at most 2 values can be written next
+            assert_eq!(cursor.capacity(), 2);
+        }
+
+        #[test]
+        fn append() {
+            let mut data = [1, 2, 3];
+            let mut buf = RevBorrowedBuf::from(data.as_mut_slice());
+
+            let append_data = [4, 5];
+            let mut cursor = buf.unfilled();
+            cursor.append(&append_data);
+
+            assert_eq!(cursor.written(), append_data.len());
+            assert_eq!(cursor.init_ref(), [1, 4, 5]);
+            assert_eq!(cursor.capacity(), 1);
+        }
     }
 }
