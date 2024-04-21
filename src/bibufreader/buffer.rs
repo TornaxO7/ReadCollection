@@ -9,7 +9,7 @@
 /// that user code which wants to do reads from a `BufReader` via `buffer` + `consume` can do so
 /// without encountering any runtime bounds checks.
 use std::cmp;
-use std::io::{self, BorrowedBuf, Read, Seek, SeekFrom};
+use std::io::{self, Read, Seek, SeekFrom};
 use std::mem::MaybeUninit;
 
 pub struct Buffer {
