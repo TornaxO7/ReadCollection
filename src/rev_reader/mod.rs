@@ -2,6 +2,9 @@ use std::io::{self, Bytes, Chain, IoSliceMut, Take};
 
 use crate::rev_borrowed_buf::RevBorrowedCursor;
 
+use self::defaults::default_rev_read_vectored;
+
+mod defaults;
 mod impls;
 
 /// Equals the [std::io::Read] trait, except that everything is in reverse.
@@ -9,10 +12,10 @@ pub trait RevRead {
     fn rev_read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
 
     fn rev_read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
-        todo!()
+        default_rev_read_vectored(|b| self.rev_read(b), bufs)
     }
     fn rev_is_read_vectored(&self) -> bool {
-        todo!()
+        false
     }
     fn rev_read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
         todo!()

@@ -6,14 +6,6 @@ use crate::{RevBufRead, RevRead};
 
 // mod buffer;
 
-// Bare metal platforms usually have very small amounts of RAM
-// (in the order of hundreds of KB)
-pub const DEFAULT_BUF_SIZE: usize = if cfg!(target_os = "espidf") {
-    512
-} else {
-    8 * 1024
-};
-
 pub struct BiBufReader<R> {
     // buf: Buffer,
     inner: R,
