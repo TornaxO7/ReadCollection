@@ -162,42 +162,6 @@ impl<T: ?Sized> SizeHint for T {
     }
 }
 
-// impl<T> SizeHint for &mut T {
-//     #[inline]
-//     fn lower_bound(&self) -> usize {
-//         SizeHint::lower_bound(*self)
-//     }
-
-//     #[inline]
-//     fn upper_bound(&self) -> Option<usize> {
-//         SizeHint::upper_bound(*self)
-//     }
-// }
-
-// impl<T> SizeHint for Box<T> {
-//     #[inline]
-//     fn lower_bound(&self) -> usize {
-//         SizeHint::lower_bound(&**self)
-//     }
-
-//     #[inline]
-//     fn upper_bound(&self) -> Option<usize> {
-//         SizeHint::upper_bound(&**self)
-//     }
-// }
-
-// impl SizeHint for &[u8] {
-//     #[inline]
-//     fn lower_bound(&self) -> usize {
-//         self.len()
-//     }
-
-//     #[inline]
-//     fn upper_bound(&self) -> Option<usize> {
-//         Some(self.len())
-//     }
-// }
-
 /// Read a single byte in a slow, generic way. This is used by the default
 /// `spec_read_byte`.
 #[inline]
