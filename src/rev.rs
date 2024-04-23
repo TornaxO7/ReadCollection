@@ -300,7 +300,6 @@ impl<T: RevRead, U: RevRead> RevRead for Chain<T, U> {
 
     // We don't override `read_to_string` here because an UTF-8 sequence could
     // be split between the two parts of the chain
-
     fn rev_read_buf(&mut self, mut buf: RevBorrowedCursor<'_>) -> Result<()> {
         if buf.capacity() == 0 {
             return Ok(());
@@ -353,9 +352,6 @@ impl<T: RevBufRead, U: RevBufRead> RevBufRead for Chain<T, U> {
         read += self.second.rev_read_until(byte, buf)?;
         Ok(read)
     }
-
-    // We don't override `read_line` here because an UTF-8 sequence could be
-    // split between the two parts of the chain
 }
 
 /// An iterator over the contents of an instance of `BufRead` split on a
