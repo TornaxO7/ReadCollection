@@ -1,5 +1,6 @@
 use std::{
-    io::{self, ErrorKind, IoSliceMut, Result, Take},
+    cmp,
+    io::{self, ErrorKind, IoSliceMut, Result},
     slice,
 };
 
@@ -56,7 +57,7 @@ pub trait RevRead {
     where
         Self: Sized,
     {
-        todo!("Can't directly use from std");
+        Take { inner: self, limit }
     }
 }
 
@@ -393,24 +394,6 @@ impl<T: RevBufRead, U: RevBufRead> RevBufRead for Chain<T, U> {
     // split between the two parts of the chain
 }
 
-// impl<T, U> SizeHint for Chain<T, U> {
-//     #[inline]
-//     fn lower_bound(&self) -> usize {
-//         SizeHint::lower_bound(&self.first) + SizeHint::lower_bound(&self.second)
-//     }
-
-//     #[inline]
-//     fn upper_bound(&self) -> Option<usize> {
-//         match (
-//             SizeHint::upper_bound(&self.first),
-//             SizeHint::upper_bound(&self.second),
-//         ) {
-//             (Some(first), Some(second)) => first.checked_add(second),
-//             _ => None,
-//         }
-//     }
-// }
-
 /// An iterator over the contents of an instance of `BufRead` split on a
 /// particular byte.
 ///
@@ -473,6 +456,236 @@ impl<B: RevBufRead> Iterator for Lines<B> {
         }
     }
 }
+
+/// Reader adapter which limits the bytes read from an underlying reader.
+///
+/// This struct is generally created by calling [`take`] on a reader.
+/// Please see the documentation of [`take`] for more details.
+///
+/// [`take`]: Read::take
+#[derive(Debug)]
+pub struct Take<T> {
+    inner: T,
+    limit: u64,
+}
+
+impl<T> Take<T> {
+    /// Returns the number of bytes that can be read before this instance will
+    /// return EOF.
+    ///
+    /// # Note
+    ///
+    /// This instance may reach `EOF` after reading fewer bytes than indicated by
+    /// this method if the underlying [`Read`] instance reaches EOF.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::io;
+    /// use std::io::prelude::*;
+    /// use std::fs::File;
+    ///
+    /// fn main() -> io::Result<()> {
+    ///     let f = File::open("foo.txt")?;
+    ///
+    ///     // read at most five bytes
+    ///     let handle = f.take(5);
+    ///
+    ///     println!("limit: {}", handle.limit());
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn limit(&self) -> u64 {
+        self.limit
+    }
+
+    /// Sets the number of bytes that can be read before this instance will
+    /// return EOF. This is the same as constructing a new `Take` instance, so
+    /// the amount of bytes read and the previous limit value don't matter when
+    /// calling this method.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::io;
+    /// use std::io::prelude::*;
+    /// use std::fs::File;
+    ///
+    /// fn main() -> io::Result<()> {
+    ///     let f = File::open("foo.txt")?;
+    ///
+    ///     // read at most five bytes
+    ///     let mut handle = f.take(5);
+    ///     handle.set_limit(10);
+    ///
+    ///     assert_eq!(handle.limit(), 10);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn set_limit(&mut self, limit: u64) {
+        self.limit = limit;
+    }
+
+    /// Consumes the `Take`, returning the wrapped reader.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::io;
+    /// use std::io::prelude::*;
+    /// use std::fs::File;
+    ///
+    /// fn main() -> io::Result<()> {
+    ///     let mut file = File::open("foo.txt")?;
+    ///
+    ///     let mut buffer = [0; 5];
+    ///     let mut handle = file.take(5);
+    ///     handle.read(&mut buffer)?;
+    ///
+    ///     let file = handle.into_inner();
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn into_inner(self) -> T {
+        self.inner
+    }
+
+    /// Gets a reference to the underlying reader.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::io;
+    /// use std::io::prelude::*;
+    /// use std::fs::File;
+    ///
+    /// fn main() -> io::Result<()> {
+    ///     let mut file = File::open("foo.txt")?;
+    ///
+    ///     let mut buffer = [0; 5];
+    ///     let mut handle = file.take(5);
+    ///     handle.read(&mut buffer)?;
+    ///
+    ///     let file = handle.get_ref();
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn get_ref(&self) -> &T {
+        &self.inner
+    }
+
+    /// Gets a mutable reference to the underlying reader.
+    ///
+    /// Care should be taken to avoid modifying the internal I/O state of the
+    /// underlying reader as doing so may corrupt the internal limit of this
+    /// `Take`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::io;
+    /// use std::io::prelude::*;
+    /// use std::fs::File;
+    ///
+    /// fn main() -> io::Result<()> {
+    ///     let mut file = File::open("foo.txt")?;
+    ///
+    ///     let mut buffer = [0; 5];
+    ///     let mut handle = file.take(5);
+    ///     handle.read(&mut buffer)?;
+    ///
+    ///     let file = handle.get_mut();
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn get_mut(&mut self) -> &mut T {
+        &mut self.inner
+    }
+}
+
+impl<T: RevRead> RevRead for Take<T> {
+    fn rev_read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        // Don't call into inner reader at all at EOF because it may still block
+        if self.limit == 0 {
+            return Ok(0);
+        }
+
+        let max = cmp::min(buf.len() as u64, self.limit) as usize;
+        let n = self.inner.rev_read(&mut buf[..max])?;
+        assert!(n as u64 <= self.limit, "number of read bytes exceeds limit");
+        self.limit -= n as u64;
+        Ok(n)
+    }
+
+    fn rev_read_buf(&mut self, mut buf: RevBorrowedCursor<'_>) -> Result<()> {
+        // Don't call into inner reader at all at EOF because it may still block
+        if self.limit == 0 {
+            return Ok(());
+        }
+
+        if self.limit <= buf.capacity() as u64 {
+            // if we just use an as cast to convert, limit may wrap around on a 32 bit target
+            let limit = cmp::min(self.limit, usize::MAX as u64) as usize;
+
+            let extra_init = cmp::min(limit as usize, buf.init_ref().len());
+
+            // SAFETY: no uninit data is written to ibuf
+            let ibuf = unsafe { &mut buf.as_mut()[..limit] };
+
+            let mut sliced_buf: RevBorrowedBuf<'_> = ibuf.into();
+
+            // SAFETY: extra_init bytes of ibuf are known to be initialized
+            unsafe {
+                sliced_buf.set_init(extra_init);
+            }
+
+            let mut cursor = sliced_buf.unfilled();
+            self.inner.rev_read_buf(cursor.reborrow())?;
+
+            let new_init = cursor.init_ref().len();
+            let filled = sliced_buf.len();
+
+            // cursor / sliced_buf / ibuf must drop here
+
+            unsafe {
+                // SAFETY: filled bytes have been filled and therefore initialized
+                buf.advance(filled);
+                // SAFETY: new_init bytes of buf's unfilled buffer have been initialized
+                buf.set_init(new_init);
+            }
+
+            self.limit -= filled as u64;
+        } else {
+            let written = buf.written();
+            self.inner.rev_read_buf(buf.reborrow())?;
+            self.limit -= (buf.written() - written) as u64;
+        }
+
+        Ok(())
+    }
+}
+
+impl<T: RevBufRead> RevBufRead for Take<T> {
+    fn rev_fill_buf(&mut self) -> Result<&[u8]> {
+        // Don't call into inner reader at all at EOF because it may still block
+        if self.limit == 0 {
+            return Ok(&[]);
+        }
+
+        let buf = self.inner.rev_fill_buf()?;
+        let cap = cmp::min(buf.len() as u64, self.limit) as usize;
+        Ok(&buf[..cap])
+    }
+
+    fn rev_consume(&mut self, amt: usize) {
+        // Don't let callers reset the limit by passing an overlarge value
+        let amt = cmp::min(amt as u64, self.limit) as usize;
+        self.limit -= amt as u64;
+        self.inner.rev_consume(amt);
+    }
+}
+
+/// == default implementations ==
 
 pub fn default_rev_read_vectored<F>(rev_read: F, bufs: &mut [IoSliceMut<'_>]) -> Result<usize>
 where
