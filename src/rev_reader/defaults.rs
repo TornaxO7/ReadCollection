@@ -1,6 +1,6 @@
 use std::io::{ErrorKind, IoSliceMut, Result};
 
-use crate::{RevBorrowedBuf, RevRead, DEFAULT_BUF_SIZE};
+use crate::{rev_borrowed_buf::RevBorrowedCursor, RevBorrowedBuf, RevRead, DEFAULT_BUF_SIZE};
 
 pub(crate) fn default_rev_read_vectored<F>(
     rev_read: F,
@@ -135,4 +135,72 @@ pub(crate) fn default_rev_read_to_end<R: RevRead + ?Sized>(
             }
         }
     }
+}
+
+pub(crate) fn default_rev_read_to_string<R: RevRead + ?Sized>(
+    r: &mut R,
+    buf: &mut String,
+    size_hint: Option<usize>,
+) -> Result<usize> {
+    todo!()
+}
+
+pub(crate) fn default_rev_read_exact<R: RevRead + ?Sized>(
+    this: &mut R,
+    mut buf: &mut [u8],
+) -> Result<()> {
+    while !buf.is_empty() {
+        match this.rev_read(buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                let buf_len = buf.len();
+                buf = &mut buf[..buf_len - n];
+            }
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+    if !buf.is_empty() {
+        Err(std::io::Error::new(
+            ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+pub(crate) fn default_rev_read_buf<F>(read: F, mut cursor: RevBorrowedCursor<'_>) -> Result<()>
+where
+    F: FnOnce(&mut [u8]) -> Result<usize>,
+{
+    let n = read(cursor.ensure_init().init_mut())?;
+    unsafe {
+        // SAFETY: we initialised using `ensure_init` so there is no uninit data to advance to.
+        cursor.advance(n);
+    }
+    Ok(())
+}
+
+pub(crate) fn default_rev_read_buf_exact<R: RevRead + ?Sized>(
+    read: &mut R,
+    mut cursor: RevBorrowedCursor<'_>,
+) -> Result<()> {
+    while cursor.capacity() > 0 {
+        let prev_written = cursor.written();
+        match read.rev_read_buf(cursor.reborrow()) {
+            Ok(()) => {}
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        }
+
+        if cursor.written() == prev_written {
+            return Err(std::io::Error::new(
+                ErrorKind::UnexpectedEof,
+                "failed to fill buffer",
+            ));
+        }
+    }
+
+    Ok(())
 }
