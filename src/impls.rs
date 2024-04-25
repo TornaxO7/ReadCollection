@@ -83,8 +83,18 @@ impl RevRead for &[u8] {
         Ok(())
     }
 
-    fn rev_read_buf_exact(&mut self, cursor: RevBorrowedCursor<'_>) -> std::io::Result<()> {
-        todo!();
+    fn rev_read_to_end(&mut self, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+        let len = self.len();
+        buf.try_reserve(len)
+            .map_err(|_| std::io::ErrorKind::OutOfMemory)?;
+
+        let mut new_vec = self.to_vec();
+        new_vec.extend_from_slice(buf);
+        *buf = new_vec;
+
+        *self = &[];
+
+        Ok(len)
     }
 
     fn rev_read_to_string(&mut self, buf: &mut String) -> std::io::Result<usize> {
@@ -192,6 +202,28 @@ mod tests {
 
             assert!(values.as_slice().rev_read_exact(&mut buffer).is_ok());
             assert_eq!(buffer, [1, 2, 3]);
+        }
+    }
+
+    mod rev_read_to_end {
+        use super::*;
+
+        #[test]
+        fn empty_vec() {
+            let values = [1, 2, 3];
+            let mut buffer = vec![];
+
+            assert_eq!(values.as_slice().rev_read_to_end(&mut buffer).ok(), Some(3));
+            assert_eq!(buffer.as_slice(), &[1, 2, 3]);
+        }
+
+        #[test]
+        fn non_empty_vec() {
+            let values = [1, 2, 3];
+            let mut buffer = vec![4];
+
+            assert_eq!(values.as_slice().rev_read_to_end(&mut buffer).ok(), Some(3));
+            assert_eq!(buffer.as_slice(), &[1, 2, 3, 4]);
         }
     }
 }
