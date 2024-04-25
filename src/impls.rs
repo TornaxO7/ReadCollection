@@ -44,7 +44,15 @@ impl RevRead for &[u8] {
     }
 
     fn rev_read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
-        todo!();
+        let mut amount_read = 0;
+        for buf in bufs {
+            amount_read += self.rev_read(buf)?;
+            if self.is_empty() {
+                break;
+            }
+        }
+
+        Ok(amount_read)
     }
 
     fn rev_is_read_vectored(&self) -> bool {
