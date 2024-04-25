@@ -55,12 +55,32 @@ impl RevRead for &[u8] {
         Ok(amount_read)
     }
 
+    #[inline]
     fn rev_is_read_vectored(&self) -> bool {
         true
     }
 
     fn rev_read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
-        todo!()
+        if buf.len() > self.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            ));
+        }
+
+        let (tail, head) = self.split_at(self.len() - buf.len());
+
+        if buf.len() == 1 {
+            let last_buf_value = buf.last_mut().unwrap();
+            *last_buf_value = *head.last().unwrap();
+        } else {
+            let head_len = head.len();
+            buf.copy_from_slice(&head[head_len - buf.len()..]);
+        }
+
+        *self = tail;
+
+        Ok(())
     }
 
     fn rev_read_buf_exact(&mut self, cursor: RevBorrowedCursor<'_>) -> std::io::Result<()> {
@@ -142,6 +162,36 @@ mod tests {
 
             assert!(values.as_slice().rev_read_buf(cursor).is_ok());
             assert_eq!(buffer, [0, 1, 2, 3]);
+        }
+    }
+
+    mod rev_read_exact {
+        use super::*;
+
+        #[test]
+        fn empty_buf() {
+            let values = [1, 2, 3];
+            let mut buffer = [];
+
+            assert!(values.as_slice().rev_read_exact(&mut buffer).is_ok());
+        }
+
+        #[test]
+        fn normal() {
+            let values = [1, 2, 3];
+            let mut buffer = [0, 0];
+
+            assert!(values.as_slice().rev_read_exact(&mut buffer).is_ok());
+            assert_eq!(buffer, [2, 3]);
+        }
+
+        #[test]
+        fn equal_size() {
+            let values = [1, 2, 3];
+            let mut buffer = [0, 0, 0];
+
+            assert!(values.as_slice().rev_read_exact(&mut buffer).is_ok());
+            assert_eq!(buffer, [1, 2, 3]);
         }
     }
 }
