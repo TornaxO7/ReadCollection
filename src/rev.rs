@@ -534,7 +534,6 @@ impl<T: RevBufRead> RevBufRead for Take<T> {
 }
 
 /// == default implementations ==
-
 pub fn default_rev_read_vectored<F>(rev_read: F, bufs: &mut [IoSliceMut<'_>]) -> Result<usize>
 where
     F: FnOnce(&mut [u8]) -> Result<usize>,
@@ -551,6 +550,7 @@ pub fn default_rev_read_to_end<R: RevRead + ?Sized>(
     buf: &mut Vec<u8>,
     size_hint: Option<usize>,
 ) -> Result<usize> {
+    todo!("find optimal solution");
     let start_len = buf.len();
     let start_cap = buf.capacity();
     // Optionally limit the maximum bytes read on each iteration.
@@ -730,4 +730,18 @@ pub fn default_rev_read_buf_exact<R: RevRead + ?Sized>(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod default_implementations {
+        use super::*;
+
+        #[test]
+        fn rev_read_exact() {
+            todo!("Implement implementation for slice first!");
+        }
+    }
 }
