@@ -67,9 +67,16 @@ pub trait RevBufRead: RevRead {
 
     fn rev_consume(&mut self, amt: usize);
 
-    // Provided methods
+    /// Check if the underlying `RevRead` has any data left to be read.
+    ///
+    /// This function may fill the buffer to check for data,
+    /// so this functions returns `Result<bool>`, not `bool`.
+    ///
+    /// Default implementation calls `rev_fill_buf` and checks that
+    /// returned slice is empty (which means that there is no data left,
+    /// since EOF is reached).
     fn rev_has_data_left(&mut self) -> io::Result<bool> {
-        todo!()
+        self.rev_fill_buf().map(|buffer| buffer.is_empty())
     }
 
     fn rev_read_until(&mut self, _byte: u8, _buf: &mut Vec<u8>) -> io::Result<usize> {
