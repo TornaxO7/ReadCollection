@@ -29,6 +29,7 @@
             pkgs.mkShell {
               packages = with pkgs; [
                 cargo-release
+                cargo-llvm-cov
               ] ++ [ rust-toolchain ];
             };
         };
