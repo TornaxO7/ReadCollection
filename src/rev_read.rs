@@ -76,8 +76,29 @@ pub trait RevBufRead: RevRead {
         todo!()
     }
 
-    fn rev_skip_until(&mut self, _byte: u8) -> io::Result<usize> {
-        todo!()
+    fn rev_skip_until(&mut self, delim: u8) -> io::Result<usize> {
+        let mut amount_read: usize = 0;
+
+        loop {
+            let (done, used) = {
+                let new_read = match self.rev_fill_buf() {
+                    Ok(n) => n,
+                    Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(e) => return Err(e),
+                };
+
+                match memchr::memrchr(delim, new_read) {
+                    Some(index) => (true, new_read.len() - index),
+                    None => (false, new_read.len()),
+                }
+            };
+
+            self.rev_consume(used);
+            amount_read += used;
+            if done || used == 0 {
+                return Ok(amount_read);
+            }
+        }
     }
 
     fn rev_read_line(&mut self, _buf: &mut String) -> io::Result<usize> {
@@ -616,4 +637,40 @@ pub fn default_rev_read_buf_exact<R: RevRead + ?Sized>(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod rev_skip_until {
+        use super::*;
+
+        #[test]
+        fn until_end() {
+            let haystack: [u8; 3] = [1, 2, 3];
+            let mut reference: &[u8] = &haystack;
+
+            assert_eq!(reference.rev_skip_until(0).ok(), Some(3));
+            assert!(reference.is_empty());
+        }
+
+        #[test]
+        fn delim_in_between() {
+            let haystack: [u8; 3] = [1, 2, 3];
+            let mut reference: &[u8] = &haystack;
+
+            assert_eq!(reference.rev_skip_until(2).ok(), Some(2));
+            assert_eq!(reference, &[1])
+        }
+
+        #[test]
+        fn delim_at_the_beginning() {
+            let haystack: [u8; 3] = [1, 2, 3];
+            let mut reference: &[u8] = &haystack;
+
+            assert_eq!(reference.rev_skip_until(3).ok(), Some(1));
+            assert_eq!(reference, &[1, 2]);
+        }
+    }
 }
