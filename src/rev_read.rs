@@ -79,8 +79,44 @@ pub trait RevBufRead: RevRead {
         self.rev_fill_buf().map(|buffer| buffer.is_empty())
     }
 
-    fn rev_read_until(&mut self, _byte: u8, _buf: &mut Vec<u8>) -> io::Result<usize> {
-        todo!()
+    fn rev_read_until(&mut self, delim: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
+        let mut amount_read = 0;
+
+        loop {
+            let (done, used) = {
+                let new_read = match self.rev_fill_buf() {
+                    Ok(n) => n,
+                    Err(err) if err.kind() == ErrorKind::Interrupted => continue,
+                    Err(err) => return Err(err),
+                };
+                match memchr::memrchr(delim, new_read) {
+                    Some(index) => {
+                        let used = new_read.len() - index;
+
+                        let mut new_buf = Vec::with_capacity(buf.len() + used);
+                        new_buf.extend_from_slice(&new_read[index..]);
+                        new_buf.extend_from_slice(buf);
+                        *buf = new_buf;
+
+                        (true, used)
+                    }
+                    None => {
+                        let mut new_buf = Vec::with_capacity(buf.len() + new_read.len());
+                        new_buf.extend_from_slice(new_read);
+                        new_buf.extend_from_slice(buf);
+                        *buf = new_buf;
+
+                        (false, new_read.len())
+                    }
+                }
+            };
+
+            self.rev_consume(used);
+            amount_read += used;
+            if done || used == 0 {
+                return Ok(amount_read);
+            }
+        }
     }
 
     fn rev_skip_until(&mut self, delim: u8) -> io::Result<usize> {
@@ -678,6 +714,43 @@ mod tests {
 
             assert_eq!(reference.rev_skip_until(3).ok(), Some(1));
             assert_eq!(reference, &[1, 2]);
+        }
+    }
+
+    mod rev_read_until {
+        use super::*;
+
+        #[test]
+        fn until_end() {
+            let haystack: [u8; 3] = [1, 2, 3];
+            let mut buffer = vec![];
+            let mut reference: &[u8] = &haystack;
+
+            assert_eq!(reference.rev_read_until(0, &mut buffer).ok(), Some(3));
+            assert!(reference.is_empty());
+            assert_eq!(&buffer, &[1, 2, 3]);
+        }
+
+        #[test]
+        fn delim_in_between() {
+            let haystack: [u8; 3] = [1, 2, 3];
+            let mut buffer = vec![];
+            let mut reference: &[u8] = &haystack;
+
+            assert_eq!(reference.rev_read_until(2, &mut buffer).ok(), Some(2));
+            assert_eq!(reference, &[1]);
+            assert_eq!(&buffer, &[2, 3]);
+        }
+
+        #[test]
+        fn delim_at_the_beginning() {
+            let haystack: [u8; 3] = [1, 2, 3];
+            let mut buffer = vec![];
+            let mut reference: &[u8] = &haystack;
+
+            assert_eq!(reference.rev_read_until(3, &mut buffer).ok(), Some(1));
+            assert_eq!(reference, &[1, 2]);
+            assert_eq!(&buffer, &[3]);
         }
     }
 }
