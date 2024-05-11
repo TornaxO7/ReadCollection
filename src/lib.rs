@@ -17,5 +17,5 @@ pub const DEFAULT_BUF_SIZE: usize = if cfg!(target_os = "espidf") {
     8 * 1024
 };
 
-pub use rev_read::{RevBufRead, RevRead};
+pub use rev_read::{RevBufRead, RevRead, RevSplit};
 pub use rev_read_borrowed_buf::{RevBorrowedBuf, RevBorrowedCursor};

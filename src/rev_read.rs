@@ -164,11 +164,11 @@ pub trait RevBufRead: RevRead {
         }
     }
 
-    fn rev_split(self, _byte: u8) -> Split<Self>
+    fn rev_split(self, delim: u8) -> RevSplit<Self>
     where
         Self: Sized,
     {
-        todo!()
+        RevSplit { buf: self, delim }
     }
 
     fn rev_lines(self) -> Lines<Self>
@@ -434,20 +434,20 @@ impl<T: RevBufRead, U: RevBufRead> RevBufRead for Chain<T, U> {
     }
 }
 
-/// An iterator over the contents of an instance of `BufRead` split on a
+/// An iterator over the contents of an instance of `RevBufRead` split on a
 /// particular byte.
 ///
-/// This struct is generally created by calling [`split`] on a `BufRead`.
-/// Please see the documentation of [`split`] for more details.
+/// This struct is generally created by calling [`rev_split`] on a `RevBufRead`.
+/// Please see the documentation of [`rev_split`] for more details.
 ///
-/// [`split`]: BufRead::split
+/// [`rev_split`]: RevBufRead::rev_split
 #[derive(Debug)]
-pub struct Split<B> {
+pub struct RevSplit<B> {
     buf: B,
     delim: u8,
 }
 
-impl<B: RevBufRead> Iterator for Split<B> {
+impl<B: RevBufRead> Iterator for RevSplit<B> {
     type Item = Result<Vec<u8>>;
 
     fn next(&mut self) -> Option<Result<Vec<u8>>> {
@@ -455,8 +455,8 @@ impl<B: RevBufRead> Iterator for Split<B> {
         match self.buf.rev_read_until(self.delim, &mut buf) {
             Ok(0) => None,
             Ok(_n) => {
-                if buf[buf.len() - 1] == self.delim {
-                    buf.pop();
+                if buf[0] == self.delim {
+                    buf.drain(..1);
                 }
                 Some(Ok(buf))
             }
@@ -675,96 +675,155 @@ pub fn default_rev_read_buf_exact<R: RevRead + ?Sized>(
 mod tests {
     use super::*;
 
-    mod rev_skip_until {
+    mod rev_buf_read {
         use super::*;
 
-        #[test]
-        fn until_end() {
-            let haystack: [u8; 3] = [1, 2, 3];
-            let mut reference: &[u8] = &haystack;
+        mod rev_read_until {
+            use super::*;
 
-            assert_eq!(reference.rev_skip_until(0).ok(), Some(3));
-            assert!(reference.is_empty());
+            #[test]
+            fn until_end() {
+                let haystack: [u8; 3] = [1, 2, 3];
+                let mut buffer = vec![];
+                let mut reference: &[u8] = &haystack;
+
+                assert_eq!(reference.rev_read_until(0, &mut buffer).ok(), Some(3));
+                assert!(reference.is_empty());
+                assert_eq!(&buffer, &[1, 2, 3]);
+            }
+
+            #[test]
+            fn delim_in_between() {
+                let haystack: [u8; 3] = [1, 2, 3];
+                let mut buffer = vec![];
+                let mut reference: &[u8] = &haystack;
+
+                assert_eq!(reference.rev_read_until(2, &mut buffer).ok(), Some(2));
+                assert_eq!(reference, &[1]);
+                assert_eq!(&buffer, &[2, 3]);
+            }
+
+            #[test]
+            fn delim_at_the_beginning() {
+                let haystack: [u8; 3] = [1, 2, 3];
+                let mut buffer = vec![];
+                let mut reference: &[u8] = &haystack;
+
+                assert_eq!(reference.rev_read_until(3, &mut buffer).ok(), Some(1));
+                assert_eq!(reference, &[1, 2]);
+                assert_eq!(&buffer, &[3]);
+            }
         }
 
-        #[test]
-        fn delim_in_between() {
-            let haystack: [u8; 3] = [1, 2, 3];
-            let mut reference: &[u8] = &haystack;
+        mod rev_skip_until {
+            use super::*;
 
-            assert_eq!(reference.rev_skip_until(2).ok(), Some(2));
-            assert_eq!(reference, &[1])
+            #[test]
+            fn until_end() {
+                let haystack: [u8; 3] = [1, 2, 3];
+                let mut reference: &[u8] = &haystack;
+
+                assert_eq!(reference.rev_skip_until(0).ok(), Some(3));
+                assert!(reference.is_empty());
+            }
+
+            #[test]
+            fn delim_in_between() {
+                let haystack: [u8; 3] = [1, 2, 3];
+                let mut reference: &[u8] = &haystack;
+
+                assert_eq!(reference.rev_skip_until(2).ok(), Some(2));
+                assert_eq!(reference, &[1])
+            }
+
+            #[test]
+            fn delim_at_the_beginning() {
+                let haystack: [u8; 3] = [1, 2, 3];
+                let mut reference: &[u8] = &haystack;
+
+                assert_eq!(reference.rev_skip_until(3).ok(), Some(1));
+                assert_eq!(reference, &[1, 2]);
+            }
         }
 
-        #[test]
-        fn delim_at_the_beginning() {
-            let haystack: [u8; 3] = [1, 2, 3];
-            let mut reference: &[u8] = &haystack;
+        mod rev_read_line {
+            use super::*;
 
-            assert_eq!(reference.rev_skip_until(3).ok(), Some(1));
-            assert_eq!(reference, &[1, 2]);
-        }
-    }
+            #[test]
+            fn no_new_line() {
+                let data = b"I use Arch btw.";
+                let mut buffer = String::new();
 
-    mod rev_read_until {
-        use super::*;
+                assert_eq!(
+                    data.as_slice().rev_read_line(&mut buffer).ok(),
+                    Some(data.len())
+                );
+                assert_eq!(buffer.as_bytes(), data as &[u8]);
+            }
 
-        #[test]
-        fn until_end() {
-            let haystack: [u8; 3] = [1, 2, 3];
-            let mut buffer = vec![];
-            let mut reference: &[u8] = &haystack;
+            #[test]
+            fn new_line_in_between() {
+                let data = b"first line\nsecond line";
+                let mut buffer = String::new();
 
-            assert_eq!(reference.rev_read_until(0, &mut buffer).ok(), Some(3));
-            assert!(reference.is_empty());
-            assert_eq!(&buffer, &[1, 2, 3]);
-        }
-
-        #[test]
-        fn delim_in_between() {
-            let haystack: [u8; 3] = [1, 2, 3];
-            let mut buffer = vec![];
-            let mut reference: &[u8] = &haystack;
-
-            assert_eq!(reference.rev_read_until(2, &mut buffer).ok(), Some(2));
-            assert_eq!(reference, &[1]);
-            assert_eq!(&buffer, &[2, 3]);
+                assert_eq!(data.as_slice().rev_read_line(&mut buffer).ok(), Some(12));
+                assert_eq!(&buffer, &"\nsecond line");
+            }
         }
 
-        #[test]
-        fn delim_at_the_beginning() {
-            let haystack: [u8; 3] = [1, 2, 3];
-            let mut buffer = vec![];
-            let mut reference: &[u8] = &haystack;
+        mod rev_split {
+            use super::*;
 
-            assert_eq!(reference.rev_read_until(3, &mut buffer).ok(), Some(1));
-            assert_eq!(reference, &[1, 2]);
-            assert_eq!(&buffer, &[3]);
-        }
-    }
+            #[test]
+            fn no_delim() {
+                let data = b"hello there";
+                let mut split = data.as_slice().rev_split(b'k');
 
-    mod rev_read_line {
-        use super::*;
+                let next = split.next();
+                assert!(next.as_ref().is_some());
+                assert!(next.as_ref().unwrap().is_ok());
+                let next = next.unwrap().unwrap();
 
-        #[test]
-        fn no_new_line() {
-            let data = b"I use Arch btw.";
-            let mut buffer = String::new();
+                assert_eq!(
+                    next,
+                    data.to_vec(),
+                    "next: {}",
+                    String::from_utf8(next.clone()).unwrap()
+                );
 
-            assert_eq!(
-                data.as_slice().rev_read_line(&mut buffer).ok(),
-                Some(data.len())
-            );
-            assert_eq!(buffer.as_bytes(), data as &[u8]);
-        }
+                assert!(split.next().is_none());
+            }
 
-        #[test]
-        fn new_line_in_between() {
-            let data = b"first line\nsecond line";
-            let mut buffer = String::new();
+            #[test]
+            fn delim_in_between() {
+                let data = b"hello there";
+                let mut split = data.as_slice().rev_split(b' ');
 
-            assert_eq!(data.as_slice().rev_read_line(&mut buffer).ok(), Some(12));
-            assert_eq!(&buffer, &"\nsecond line");
+                let first = split.next();
+                assert!(first.as_ref().is_some());
+                assert!(first.as_ref().unwrap().is_ok());
+                let first = first.unwrap().unwrap();
+
+                let second = split.next();
+                assert!(second.as_ref().is_some());
+                assert!(second.as_ref().unwrap().is_ok());
+                let second = second.unwrap().unwrap();
+
+                assert_eq!(
+                    first,
+                    b"there".to_vec(),
+                    "first: '{}'",
+                    String::from_utf8(first.clone()).unwrap()
+                );
+                assert_eq!(
+                    second,
+                    b"hello".to_vec(),
+                    "second: '{}'",
+                    String::from_utf8(second.clone()).unwrap()
+                );
+
+                assert!(split.next().is_none());
+            }
         }
     }
 }
