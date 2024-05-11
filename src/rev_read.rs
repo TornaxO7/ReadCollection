@@ -21,15 +21,14 @@ pub trait RevRead {
     fn rev_is_read_vectored(&self) -> bool {
         false
     }
-    fn rev_read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
+    fn rev_read_to_end(&mut self, _buf: &mut Vec<u8>) -> Result<usize> {
         todo!();
     }
-    fn rev_read_to_string(&mut self, buf: &mut String) -> Result<usize> {
+    fn rev_read_to_string(&mut self, _buf: &mut String) -> Result<usize> {
         todo!();
     }
-    fn rev_read_exact(&mut self, buf: &mut [u8]) -> Result<()> {
+    fn rev_read_exact(&mut self, _buf: &mut [u8]) -> Result<()> {
         todo!();
-        default_rev_read_exact(self, buf)
     }
     fn rev_read_buf(&mut self, cursor: RevBorrowedCursor<'_>) -> Result<()> {
         default_rev_read_buf(|b| self.rev_read(b), cursor)
@@ -615,43 +614,27 @@ impl<T: RevBufRead> RevBufRead for Take<T> {
 }
 
 /// == default implementations ==
-pub fn default_rev_read_to_end<R: RevRead + ?Sized>(
-    _r: &mut R,
-    _buf: &mut [u8],
-    _size_hint: Option<usize>,
-) -> Result<usize> {
-    todo!()
-}
-
-pub fn default_rev_read_to_string<R: RevRead + ?Sized>(
-    _r: &mut R,
-    _buf: &mut str,
-    _size_hint: Option<usize>,
-) -> Result<usize> {
-    todo!()
-}
-
-pub fn default_rev_read_exact<R: RevRead + ?Sized>(this: &mut R, mut buf: &mut [u8]) -> Result<()> {
-    while !buf.is_empty() {
-        match this.rev_read(buf) {
-            Ok(0) => break,
-            Ok(n) => {
-                let buf_len = buf.len();
-                buf = &mut buf[..buf_len - n];
-            }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
-        }
-    }
-    if !buf.is_empty() {
-        Err(std::io::Error::new(
-            ErrorKind::UnexpectedEof,
-            "failed to fill whole buffer",
-        ))
-    } else {
-        Ok(())
-    }
-}
+// pub fn default_rev_read_exact<R: RevRead + ?Sized>(this: &mut R, mut buf: &mut [u8]) -> Result<()> {
+//     while !buf.is_empty() {
+//         match this.rev_read(buf) {
+//             Ok(0) => break,
+//             Ok(n) => {
+//                 let buf_len = buf.len();
+//                 buf = &mut buf[..buf_len - n];
+//             }
+//             Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+//             Err(e) => return Err(e),
+//         }
+//     }
+//     if !buf.is_empty() {
+//         Err(std::io::Error::new(
+//             ErrorKind::UnexpectedEof,
+//             "failed to fill whole buffer",
+//         ))
+//     } else {
+//         Ok(())
+//     }
+// }
 
 pub fn default_rev_read_buf<F>(read: F, mut cursor: RevBorrowedCursor<'_>) -> Result<()>
 where
