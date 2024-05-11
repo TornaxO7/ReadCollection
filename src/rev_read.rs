@@ -11,19 +11,24 @@ pub trait RevRead {
     fn rev_read(&mut self, buf: &mut [u8]) -> Result<usize>;
 
     fn rev_read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> Result<usize> {
-        default_rev_read_vectored(|b| self.rev_read(b), bufs)
+        let buf = bufs
+            .iter_mut()
+            .find(|b| !b.is_empty())
+            .map_or(&mut [][..], |b| &mut **b);
+
+        self.rev_read(buf)
     }
     fn rev_is_read_vectored(&self) -> bool {
         false
     }
-    fn rev_read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
-        default_rev_read_to_end(self, buf, None)
+    fn rev_read_to_end(&mut self, _buf: &mut Vec<u8>) -> Result<usize> {
+        todo!();
     }
-    fn rev_read_to_string(&mut self, buf: &mut String) -> Result<usize> {
-        default_rev_read_to_string(self, buf, None)
+    fn rev_read_to_string(&mut self, _buf: &mut String) -> Result<usize> {
+        todo!();
     }
-    fn rev_read_exact(&mut self, buf: &mut [u8]) -> Result<()> {
-        default_rev_read_exact(self, buf)
+    fn rev_read_exact(&mut self, _buf: &mut [u8]) -> Result<()> {
+        todo!();
     }
     fn rev_read_buf(&mut self, cursor: RevBorrowedCursor<'_>) -> Result<()> {
         default_rev_read_buf(|b| self.rev_read(b), cursor)
@@ -144,8 +149,19 @@ pub trait RevBufRead: RevRead {
         }
     }
 
-    fn rev_read_line(&mut self, _buf: &mut String) -> io::Result<usize> {
-        todo!()
+    fn rev_read_line(&mut self, dest: &mut String) -> io::Result<usize> {
+        let mut buffer = Vec::with_capacity(crate::DEFAULT_BUF_SIZE);
+
+        let amount_read = self.rev_read_until(b'\n', &mut buffer)?;
+        match String::from_utf8(buffer) {
+            Ok(mut line) => {
+                line.push_str(dest);
+                *dest = line;
+
+                Ok(amount_read)
+            }
+            Err(err) => Err(io::Error::new(ErrorKind::InvalidData, err)),
+        }
     }
 
     fn rev_split(self, _byte: u8) -> Split<Self>
@@ -598,54 +614,27 @@ impl<T: RevBufRead> RevBufRead for Take<T> {
 }
 
 /// == default implementations ==
-pub fn default_rev_read_vectored<F>(rev_read: F, bufs: &mut [IoSliceMut<'_>]) -> Result<usize>
-where
-    F: FnOnce(&mut [u8]) -> Result<usize>,
-{
-    let buf = bufs
-        .iter_mut()
-        .find(|b| !b.is_empty())
-        .map_or(&mut [][..], |b| &mut **b);
-    rev_read(buf)
-}
-
-pub fn default_rev_read_to_end<R: RevRead + ?Sized>(
-    _r: &mut R,
-    _buf: &mut [u8],
-    _size_hint: Option<usize>,
-) -> Result<usize> {
-    todo!()
-}
-
-pub fn default_rev_read_to_string<R: RevRead + ?Sized>(
-    _r: &mut R,
-    _buf: &mut str,
-    _size_hint: Option<usize>,
-) -> Result<usize> {
-    todo!()
-}
-
-pub fn default_rev_read_exact<R: RevRead + ?Sized>(this: &mut R, mut buf: &mut [u8]) -> Result<()> {
-    while !buf.is_empty() {
-        match this.rev_read(buf) {
-            Ok(0) => break,
-            Ok(n) => {
-                let buf_len = buf.len();
-                buf = &mut buf[..buf_len - n];
-            }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
-        }
-    }
-    if !buf.is_empty() {
-        Err(std::io::Error::new(
-            ErrorKind::UnexpectedEof,
-            "failed to fill whole buffer",
-        ))
-    } else {
-        Ok(())
-    }
-}
+// pub fn default_rev_read_exact<R: RevRead + ?Sized>(this: &mut R, mut buf: &mut [u8]) -> Result<()> {
+//     while !buf.is_empty() {
+//         match this.rev_read(buf) {
+//             Ok(0) => break,
+//             Ok(n) => {
+//                 let buf_len = buf.len();
+//                 buf = &mut buf[..buf_len - n];
+//             }
+//             Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+//             Err(e) => return Err(e),
+//         }
+//     }
+//     if !buf.is_empty() {
+//         Err(std::io::Error::new(
+//             ErrorKind::UnexpectedEof,
+//             "failed to fill whole buffer",
+//         ))
+//     } else {
+//         Ok(())
+//     }
+// }
 
 pub fn default_rev_read_buf<F>(read: F, mut cursor: RevBorrowedCursor<'_>) -> Result<()>
 where
@@ -751,6 +740,31 @@ mod tests {
             assert_eq!(reference.rev_read_until(3, &mut buffer).ok(), Some(1));
             assert_eq!(reference, &[1, 2]);
             assert_eq!(&buffer, &[3]);
+        }
+    }
+
+    mod rev_read_line {
+        use super::*;
+
+        #[test]
+        fn no_new_line() {
+            let data = b"I use Arch btw.";
+            let mut buffer = String::new();
+
+            assert_eq!(
+                data.as_slice().rev_read_line(&mut buffer).ok(),
+                Some(data.len())
+            );
+            assert_eq!(buffer.as_bytes(), data as &[u8]);
+        }
+
+        #[test]
+        fn new_line_in_between() {
+            let data = b"first line\nsecond line";
+            let mut buffer = String::new();
+
+            assert_eq!(data.as_slice().rev_read_line(&mut buffer).ok(), Some(12));
+            assert_eq!(&buffer, &"\nsecond line");
         }
     }
 }
