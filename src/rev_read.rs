@@ -11,18 +11,24 @@ pub trait RevRead {
     fn rev_read(&mut self, buf: &mut [u8]) -> Result<usize>;
 
     fn rev_read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> Result<usize> {
-        default_rev_read_vectored(|b| self.rev_read(b), bufs)
+        let buf = bufs
+            .iter_mut()
+            .find(|b| !b.is_empty())
+            .map_or(&mut [][..], |b| &mut **b);
+
+        self.rev_read(buf)
     }
     fn rev_is_read_vectored(&self) -> bool {
         false
     }
     fn rev_read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
-        default_rev_read_to_end(self, buf, None)
+        todo!();
     }
     fn rev_read_to_string(&mut self, buf: &mut String) -> Result<usize> {
-        default_rev_read_to_string(self, buf, None)
+        todo!();
     }
     fn rev_read_exact(&mut self, buf: &mut [u8]) -> Result<()> {
+        todo!();
         default_rev_read_exact(self, buf)
     }
     fn rev_read_buf(&mut self, cursor: RevBorrowedCursor<'_>) -> Result<()> {
@@ -598,17 +604,6 @@ impl<T: RevBufRead> RevBufRead for Take<T> {
 }
 
 /// == default implementations ==
-pub fn default_rev_read_vectored<F>(rev_read: F, bufs: &mut [IoSliceMut<'_>]) -> Result<usize>
-where
-    F: FnOnce(&mut [u8]) -> Result<usize>,
-{
-    let buf = bufs
-        .iter_mut()
-        .find(|b| !b.is_empty())
-        .map_or(&mut [][..], |b| &mut **b);
-    rev_read(buf)
-}
-
 pub fn default_rev_read_to_end<R: RevRead + ?Sized>(
     _r: &mut R,
     _buf: &mut [u8],
