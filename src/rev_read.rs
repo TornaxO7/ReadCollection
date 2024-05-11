@@ -150,8 +150,19 @@ pub trait RevBufRead: RevRead {
         }
     }
 
-    fn rev_read_line(&mut self, _buf: &mut String) -> io::Result<usize> {
-        todo!()
+    fn rev_read_line(&mut self, dest: &mut String) -> io::Result<usize> {
+        let mut buffer = Vec::with_capacity(crate::DEFAULT_BUF_SIZE);
+
+        let amount_read = self.rev_read_until(b'\n', &mut buffer)?;
+        match String::from_utf8(buffer) {
+            Ok(mut line) => {
+                line.push_str(dest);
+                *dest = line;
+
+                Ok(amount_read)
+            }
+            Err(err) => Err(io::Error::new(ErrorKind::InvalidData, err)),
+        }
     }
 
     fn rev_split(self, _byte: u8) -> Split<Self>
@@ -746,6 +757,31 @@ mod tests {
             assert_eq!(reference.rev_read_until(3, &mut buffer).ok(), Some(1));
             assert_eq!(reference, &[1, 2]);
             assert_eq!(&buffer, &[3]);
+        }
+    }
+
+    mod rev_read_line {
+        use super::*;
+
+        #[test]
+        fn no_new_line() {
+            let data = b"I use Arch btw.";
+            let mut buffer = String::new();
+
+            assert_eq!(
+                data.as_slice().rev_read_line(&mut buffer).ok(),
+                Some(data.len())
+            );
+            assert_eq!(buffer.as_bytes(), data as &[u8]);
+        }
+
+        #[test]
+        fn new_line_in_between() {
+            let data = b"first line\nsecond line";
+            let mut buffer = String::new();
+
+            assert_eq!(data.as_slice().rev_read_line(&mut buffer).ok(), Some(12));
+            assert_eq!(&buffer, &"\nsecond line");
         }
     }
 }
