@@ -161,7 +161,7 @@ pub trait RevBufRead: RevRead {
         {
             let mut new_buf = Vec::with_capacity(buffer.len() + 1);
             new_buf.push(b'\r');
-            new_buf.extend_from_slice(&mut buffer);
+            new_buf.extend_from_slice(&buffer);
             buffer = new_buf;
             amount_read += 1;
             self.rev_consume(1);
