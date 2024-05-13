@@ -1,4 +1,3 @@
-// #![feature(core_io_borrowed_buf)]
 #![feature(new_uninit)]
 #![feature(maybe_uninit_slice)]
 #![feature(maybe_uninit_write_slice)]

@@ -152,7 +152,21 @@ pub trait RevBufRead: RevRead {
     fn rev_read_line(&mut self, dest: &mut String) -> io::Result<usize> {
         let mut buffer = Vec::with_capacity(crate::DEFAULT_BUF_SIZE);
 
-        let amount_read = self.rev_read_until(b'\n', &mut buffer)?;
+        let mut amount_read = self.rev_read_until(b'\n', &mut buffer)?;
+        if self
+            .rev_fill_buf()?
+            .last()
+            .map(|&c| c == b'\r')
+            .unwrap_or(false)
+        {
+            let mut new_buf = Vec::with_capacity(buffer.len() + 1);
+            new_buf.push(b'\r');
+            new_buf.extend_from_slice(&buffer);
+            buffer = new_buf;
+            amount_read += 1;
+            self.rev_consume(1);
+        }
+
         match String::from_utf8(buffer) {
             Ok(mut line) => {
                 line.push_str(dest);
@@ -171,11 +185,11 @@ pub trait RevBufRead: RevRead {
         RevSplit { buf: self, delim }
     }
 
-    fn rev_lines(self) -> Lines<Self>
+    fn rev_lines(self) -> RevLines<Self>
     where
         Self: Sized,
     {
-        todo!()
+        RevLines { buf: self }
     }
 }
 
@@ -465,18 +479,18 @@ impl<B: RevBufRead> Iterator for RevSplit<B> {
     }
 }
 
-/// An iterator over the lines of an instance of `BufRead`.
+/// An iterator over the lines of an instance of `RevBufRead`.
 ///
-/// This struct is generally created by calling [`lines`] on a `BufRead`.
-/// Please see the documentation of [`lines`] for more details.
+/// This struct is generally created by calling [`rev_lines`] on a `RevBufRead`.
+/// Please see the documentation of [`rev_lines`] for more details.
 ///
-/// [`lines`]: BufRead::lines
+/// [`rev_lines`]: RevBufRead::rev_lines
 #[derive(Debug)]
-pub struct Lines<B> {
+pub struct RevLines<B> {
     buf: B,
 }
 
-impl<B: RevBufRead> Iterator for Lines<B> {
+impl<B: RevBufRead> Iterator for RevLines<B> {
     type Item = Result<String>;
 
     fn next(&mut self) -> Option<Result<String>> {
@@ -484,12 +498,12 @@ impl<B: RevBufRead> Iterator for Lines<B> {
         match self.buf.rev_read_line(&mut buf) {
             Ok(0) => None,
             Ok(_n) => {
-                if buf.ends_with('\n') {
-                    buf.pop();
-                    if buf.ends_with('\r') {
-                        buf.pop();
-                    }
+                if buf.starts_with('\n') {
+                    buf = buf.drain(1..).collect();
+                } else if buf.starts_with("\r\n") {
+                    buf = buf.drain(2..).collect();
                 }
+
                 Some(Ok(buf))
             }
             Err(e) => Some(Err(e)),
@@ -763,11 +777,20 @@ mod tests {
 
             #[test]
             fn new_line_in_between() {
-                let data = b"first line\nsecond line";
+                let data = b"first line\r\nsecond line";
                 let mut buffer = String::new();
 
-                assert_eq!(data.as_slice().rev_read_line(&mut buffer).ok(), Some(12));
-                assert_eq!(&buffer, &"\nsecond line");
+                assert_eq!(data.as_slice().rev_read_line(&mut buffer).ok(), Some(13));
+                assert_eq!(&buffer, &"\r\nsecond line");
+            }
+
+            #[test]
+            fn new_line_in_beginning() {
+                let data = b"\nsus";
+                let mut buffer = String::new();
+
+                assert_eq!(data.as_slice().rev_read_line(&mut buffer).ok(), Some(4));
+                assert_eq!(buffer.as_bytes(), data);
             }
         }
 
@@ -823,6 +846,44 @@ mod tests {
                 );
 
                 assert!(split.next().is_none());
+            }
+        }
+
+        mod rev_lines {
+            use super::*;
+
+            #[test]
+            fn no_new_lines() {
+                let data = b"hello\rthere";
+                let mut lines = data.as_slice().rev_lines();
+
+                let next = lines.next();
+                assert!(next.as_ref().is_some());
+                assert!(next.as_ref().unwrap().is_ok());
+                assert_eq!(
+                    next.unwrap().unwrap(),
+                    String::from_utf8(data.to_vec()).unwrap()
+                );
+
+                assert!(lines.next().is_none());
+            }
+
+            #[test]
+            fn one_new_line_char() {
+                let data = b"Hello there!\r\nGeneral kenobi!";
+                let mut lines = data.as_slice().rev_lines();
+
+                let next = lines.next();
+                assert!(next.as_ref().is_some());
+                assert!(next.as_ref().unwrap().is_ok());
+                assert_eq!(next.unwrap().unwrap(), "General kenobi!".to_string());
+
+                let next = lines.next();
+                assert!(next.as_ref().is_some());
+                assert!(next.as_ref().unwrap().is_ok());
+                assert_eq!(next.unwrap().unwrap(), "Hello there!".to_string());
+
+                assert!(lines.next().is_none());
             }
         }
     }
