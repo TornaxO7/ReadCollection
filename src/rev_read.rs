@@ -164,11 +164,11 @@ pub trait RevRead {
             done_first: false,
         }
     }
-    fn rev_take(self, limit: u64) -> Take<Self>
+    fn rev_take(self, limit: u64) -> RevTake<Self>
     where
         Self: Sized,
     {
-        Take { inner: self, limit }
+        RevTake { inner: self, limit }
     }
 }
 
@@ -624,12 +624,12 @@ impl<B: RevBufRead> Iterator for RevLines<B> {
 ///
 /// [`take`]: Read::take
 #[derive(Debug)]
-pub struct Take<T> {
+pub struct RevTake<T> {
     inner: T,
     limit: u64,
 }
 
-impl<T> Take<T> {
+impl<T> RevTake<T> {
     pub fn limit(&self) -> u64 {
         self.limit
     }
@@ -651,15 +651,17 @@ impl<T> Take<T> {
     }
 }
 
-impl<T: RevRead> RevRead for Take<T> {
+impl<T: RevRead> RevRead for RevTake<T> {
     fn rev_read(&mut self, buf: &mut [u8]) -> Result<usize> {
         // Don't call into inner reader at all at EOF because it may still block
         if self.limit == 0 {
             return Ok(0);
         }
 
-        let max = cmp::min(buf.len() as u64, self.limit) as usize;
-        let n = self.inner.rev_read(&mut buf[..max])?;
+        let buf_len = buf.len();
+
+        let max = cmp::min(buf_len as u64, self.limit) as usize;
+        let n = self.inner.rev_read(&mut buf[buf_len - max..])?;
         assert!(n as u64 <= self.limit, "number of read bytes exceeds limit");
         self.limit -= n as u64;
         Ok(n)
@@ -672,15 +674,19 @@ impl<T: RevRead> RevRead for Take<T> {
         }
 
         if self.limit <= buf.capacity() as u64 {
-            // if we just use an as cast to convert, limit may wrap around on a 32 bit target
+            // if we just use an `as` cast to convert, limit may wrap around on a 32 bit target
             let limit = cmp::min(self.limit, usize::MAX as u64) as usize;
 
-            let extra_init = cmp::min(limit as usize, buf.init_ref().len());
+            let buf_init_ref_len = buf.init_ref().len();
+            let extra_init = cmp::min(limit as usize, buf_init_ref_len);
 
             // SAFETY: no uninit data is written to ibuf
-            let ibuf = unsafe { &mut buf.as_mut()[..limit] };
+            let init_buf = {
+                let buf_capacity = buf.capacity();
+                unsafe { &mut buf.as_mut()[buf_capacity - limit..] }
+            };
 
-            let mut sliced_buf: RevBorrowedBuf<'_> = ibuf.into();
+            let mut sliced_buf: RevBorrowedBuf<'_> = init_buf.into();
 
             // SAFETY: extra_init bytes of ibuf are known to be initialized
             unsafe {
@@ -713,7 +719,7 @@ impl<T: RevRead> RevRead for Take<T> {
     }
 }
 
-impl<T: RevBufRead> RevBufRead for Take<T> {
+impl<T: RevBufRead> RevBufRead for RevTake<T> {
     fn rev_fill_buf(&mut self) -> Result<&[u8]> {
         // Don't call into inner reader at all at EOF because it may still block
         if self.limit == 0 {
@@ -721,8 +727,10 @@ impl<T: RevBufRead> RevBufRead for Take<T> {
         }
 
         let buf = self.inner.rev_fill_buf()?;
-        let cap = cmp::min(buf.len() as u64, self.limit) as usize;
-        Ok(&buf[..cap])
+        let buf_len = buf.len();
+
+        let cap = cmp::min(buf_len as u64, self.limit) as usize;
+        Ok(&buf[buf_len - cap..])
     }
 
     fn rev_consume(&mut self, amt: usize) {
@@ -810,6 +818,92 @@ mod tests {
                 assert_eq!(reference.rev_read_to_end(&mut buffer).ok(), Some(3));
                 assert!(reference.is_empty());
                 assert_eq!(&buffer, &data);
+            }
+        }
+
+        mod rev_take {
+            use super::*;
+
+            mod rev_read {
+                use super::*;
+
+                #[test]
+                fn zero_rev_take() {
+                    let data: [u8; 3] = [1, 2, 3];
+                    let mut buffer: [u8; 3] = [0, 0, 0];
+                    let mut take = data.as_slice().rev_take(0);
+
+                    assert_eq!(take.rev_read(&mut buffer).ok(), Some(0));
+                    assert_eq!(&buffer, &[0, 0, 0]);
+                }
+
+                #[test]
+                fn middle_rev_take() {
+                    let data: [u8; 3] = [1, 2, 3];
+                    let mut buffer: [u8; 2] = [0, 0];
+                    let mut take = data.as_slice().rev_take(1);
+
+                    assert_eq!(take.rev_read(&mut buffer).ok(), Some(1));
+                    assert_eq!(&buffer, &[0, 3]);
+                }
+
+                #[test]
+                fn fill_rev_take() {
+                    let data: [u8; 3] = [1, 2, 3];
+                    let mut buffer: [u8; 4] = [0; 4];
+                    let mut take = data.as_slice().rev_take(data.len() as u64);
+
+                    assert_eq!(take.rev_read(&mut buffer).ok(), Some(data.len()));
+                    assert_eq!(&buffer, &[0, 1, 2, 3]);
+                }
+            }
+
+            mod rev_read_buf {
+                use super::*;
+
+                #[test]
+                fn zero_rev_read_buf() {
+                    let data: [u8; 3] = [1, 2, 3];
+                    let mut buffer: [u8; 3] = [0; 3];
+
+                    let mut take = data.as_slice().rev_take(0);
+
+                    let mut buf = RevBorrowedBuf::from(buffer.as_mut_slice());
+                    let cursor = buf.unfilled();
+
+                    assert!(take.rev_read_buf(cursor).is_ok());
+                    assert_eq!(&buffer, &[0; 3]);
+                }
+
+                #[test]
+                fn full_rev_read_buf() {
+                    let data: [u8; 3] = [1, 2, 3];
+                    let mut buffer: [u8; 3] = [0; 3];
+
+                    let data_len = data.len();
+                    let mut take = data.as_slice().rev_take(data_len as u64);
+
+                    let mut buf = RevBorrowedBuf::from(buffer.as_mut_slice());
+                    let cursor = buf.unfilled();
+
+                    assert!(take.rev_read_buf(cursor).is_ok());
+                    assert_eq!(&buffer, &data);
+                }
+
+                #[test]
+                fn take_bigger_than_datta() {
+                    let data: [u8; 3] = [1, 2, 3];
+                    let mut buffer: [u8; 3] = [0; 3];
+
+                    let data_len = data.len();
+                    let mut take = data.as_slice().rev_take((data_len + 10) as u64);
+
+                    let mut buf = RevBorrowedBuf::from(buffer.as_mut_slice());
+                    let cursor = buf.unfilled();
+
+                    assert!(take.rev_read_buf(cursor).is_ok());
+                    assert_eq!(&buffer, &data);
+                }
             }
         }
     }
@@ -1009,6 +1103,46 @@ mod tests {
                 assert_eq!(next.unwrap().unwrap(), "Hello there!".to_string());
 
                 assert!(lines.next().is_none());
+            }
+        }
+
+        mod rev_take {
+            use super::*;
+
+            mod rev_fill_buf {
+                use super::*;
+
+                #[test]
+                fn middle_rev_fill_buf() {
+                    let data: [u8; 3] = [1, 2, 3];
+
+                    let mut take = data.as_slice().rev_take(2);
+
+                    let buf = take.rev_fill_buf();
+                    assert_eq!(buf.ok(), Some([2, 3].as_slice()));
+                }
+
+                #[test]
+                fn exceeding_take_value() {
+                    let data: [u8; 3] = [1, 2, 3];
+                    let mut take = data.as_slice().rev_take((data.len() + 10) as u64);
+
+                    let buf = take.rev_fill_buf();
+                    assert_eq!(buf.ok(), Some(data.as_slice()));
+                }
+            }
+
+            mod rev_consume {
+                use super::*;
+
+                #[test]
+                fn exceeding_consume() {
+                    let data: [u8; 3] = [1, 2, 3];
+                    let mut take = data.as_slice().rev_take(data.len() as u64);
+                    take.rev_consume(1);
+
+                    assert_eq!(take.rev_fill_buf().ok(), Some([1, 2].as_slice()));
+                }
             }
         }
     }

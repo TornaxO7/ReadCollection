@@ -280,7 +280,7 @@ impl<'a> RevBorrowedCursor<'a> {
     /// The caller must ensure that the first `n` bytes of the buffer have already been initialized.
     #[inline]
     pub unsafe fn set_init(&mut self, n: usize) -> &mut Self {
-        self.buf.init = cmp::min(self.buf.init, self.buf.filled - n);
+        self.buf.init = cmp::min(self.buf.init, self.buf.filled.saturating_sub(n));
         self
     }
 
