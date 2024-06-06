@@ -154,11 +154,11 @@ pub trait RevRead {
     {
         Bytes { inner: self }
     }
-    fn rev_chain<R: io::Read>(self, next: R) -> Chain<Self, R>
+    fn rev_chain<R: RevRead>(self, next: R) -> RevChain<Self, R>
     where
         Self: Sized,
     {
-        Chain {
+        RevChain {
             first: self,
             second: next,
             done_first: false,
@@ -384,13 +384,13 @@ fn inlined_slow_read_byte<R: RevRead>(reader: &mut R) -> Option<Result<u8>> {
 ///
 /// [`chain`]: Read::chain
 #[derive(Debug)]
-pub struct Chain<T, U> {
+pub struct RevChain<T, U> {
     first: T,
     second: U,
     done_first: bool,
 }
 
-impl<T, U> Chain<T, U> {
+impl<T, U> RevChain<T, U> {
     /// Consumes the `Chain`, returning the wrapped readers.
     ///
     /// # Examples
@@ -462,7 +462,7 @@ impl<T, U> Chain<T, U> {
     }
 }
 
-impl<T: RevRead, U: RevRead> RevRead for Chain<T, U> {
+impl<T: RevRead, U: RevRead> RevRead for RevChain<T, U> {
     fn rev_read(&mut self, buf: &mut [u8]) -> Result<usize> {
         if !self.done_first {
             match self.first.rev_read(buf)? {
@@ -519,7 +519,7 @@ impl<T: RevRead, U: RevRead> RevRead for Chain<T, U> {
     }
 }
 
-impl<T: RevBufRead, U: RevBufRead> RevBufRead for Chain<T, U> {
+impl<T: RevBufRead, U: RevBufRead> RevBufRead for RevChain<T, U> {
     fn rev_fill_buf(&mut self) -> Result<&[u8]> {
         if !self.done_first {
             match self.first.rev_fill_buf()? {
@@ -1143,6 +1143,36 @@ mod tests {
 
                     assert_eq!(take.rev_fill_buf().ok(), Some([1, 2].as_slice()));
                 }
+            }
+        }
+
+        mod rev_chain {
+            use super::*;
+
+            #[test]
+            fn empty_chain() {
+                let data1: [u8; 0] = [];
+                let data2: [u8; 0] = [];
+
+                let mut buffer: Vec<u8> = Vec::new();
+
+                let mut rev_chain = data1.as_slice().rev_chain(data2.as_slice());
+
+                assert_eq!(rev_chain.rev_read(&mut buffer).ok(), Some(0));
+                assert!(buffer.is_empty());
+            }
+
+            #[test]
+            fn first_chain_full() {
+                let data1: [u8; 3] = [1, 2, 3];
+                let data2: [u8; 0] = [];
+
+                let mut buffer: [u8; 4] = [0; 4];
+
+                let mut rev_chain = data1.as_slice().rev_chain(data2.as_slice());
+
+                assert_eq!(rev_chain.rev_read(&mut buffer).ok(), Some(3));
+                assert_eq!(&buffer, &[0, 1, 2, 3]);
             }
         }
     }
