@@ -250,7 +250,7 @@ impl<'a> RevBorrowedCursor<'a> {
     /// The caller must ensure that the first `n` bytes of the cursor have been properly
     /// initialised.
     #[inline]
-    pub unsafe fn advance(&mut self, n: usize) -> &mut Self {
+    pub fn advance(&mut self, n: usize) -> &mut Self {
         self.buf.filled -= n;
         self.buf.init = cmp::min(self.buf.init, self.buf.filled);
         self
