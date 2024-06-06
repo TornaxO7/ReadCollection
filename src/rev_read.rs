@@ -726,10 +726,7 @@ where
     F: FnOnce(&mut [u8]) -> Result<usize>,
 {
     let n = read(cursor.ensure_init().init_mut())?;
-    unsafe {
-        // SAFETY: we initialised using `ensure_init` so there is no uninit data to advance to.
-        cursor.advance(n);
-    }
+    cursor.advance(n);
     Ok(())
 }
 
