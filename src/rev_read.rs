@@ -148,11 +148,11 @@ pub trait RevRead {
     {
         self
     }
-    fn rev_bytes(self) -> Bytes<Self>
+    fn rev_bytes(self) -> RevBytes<Self>
     where
         Self: Sized,
     {
-        Bytes { inner: self }
+        RevBytes { inner: self }
     }
     fn rev_chain<R: RevRead>(self, next: R) -> RevChain<Self, R>
     where
@@ -306,74 +306,30 @@ pub trait RevBufRead: RevRead {
 ///
 /// [`bytes`]: Read::bytes
 #[derive(Debug)]
-pub struct Bytes<R> {
+pub struct RevBytes<R> {
     pub inner: R,
 }
 
-impl<R: RevRead> Iterator for Bytes<R> {
+impl<R: RevRead> Iterator for RevBytes<R> {
     type Item = Result<u8>;
 
     // Not `#[inline]`. This function gets inlined even without it, but having
     // the inline annotation can result in worse code generation. See #116785.
     fn next(&mut self) -> Option<Result<u8>> {
-        SpecReadByte::spec_read_byte(&mut self.inner)
+        let mut byte: u8 = 0;
+        loop {
+            return match self.inner.rev_read(slice::from_mut(&mut byte)) {
+                Ok(0) => None,
+                Ok(..) => Some(Ok(byte)),
+                Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+                Err(e) => Some(Err(e)),
+            };
+        }
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        SizeHint::size_hint(&self.inner)
-    }
-}
-
-/// For the specialization of `Bytes::next`.
-trait SpecReadByte {
-    fn spec_read_byte(&mut self) -> Option<Result<u8>>;
-}
-
-impl<R> SpecReadByte for R
-where
-    Self: RevRead,
-{
-    #[inline]
-    fn spec_read_byte(&mut self) -> Option<Result<u8>> {
-        inlined_slow_read_byte(self)
-    }
-}
-
-trait SizeHint {
-    fn lower_bound(&self) -> usize;
-
-    fn upper_bound(&self) -> Option<usize>;
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.lower_bound(), self.upper_bound())
-    }
-}
-
-impl<T: ?Sized> SizeHint for T {
-    #[inline]
-    fn lower_bound(&self) -> usize {
-        0
-    }
-
-    #[inline]
-    fn upper_bound(&self) -> Option<usize> {
-        None
-    }
-}
-
-/// Read a single byte in a slow, generic way. This is used by the default
-/// `spec_read_byte`.
-#[inline]
-fn inlined_slow_read_byte<R: RevRead>(reader: &mut R) -> Option<Result<u8>> {
-    let mut byte = 0;
-    loop {
-        return match reader.rev_read(slice::from_mut(&mut byte)) {
-            Ok(0) => None,
-            Ok(..) => Some(Ok(byte)),
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-            Err(e) => Some(Err(e)),
-        };
+        (0, None)
     }
 }
 
@@ -1173,6 +1129,32 @@ mod tests {
 
                 assert_eq!(rev_chain.rev_read(&mut buffer).ok(), Some(3));
                 assert_eq!(&buffer, &[0, 1, 2, 3]);
+            }
+        }
+
+        mod rev_bytes {
+            use super::*;
+
+            #[test]
+            fn empty_data() {
+                let data: [u8; 0] = [];
+
+                let mut rev_bytes = data.as_slice().rev_bytes();
+                assert!(rev_bytes.next().is_none());
+            }
+
+            #[test]
+            fn general() {
+                let data: [u8; 3] = [1, 2, 3];
+
+                let mut rev_bytes = data.as_slice().rev_bytes();
+                for byte_value in 3..=1 {
+                    let next_value = rev_bytes.next();
+
+                    assert!(&next_value.is_some());
+                    assert!(next_value.as_ref().unwrap().is_ok());
+                    assert_eq!(next_value.unwrap().unwrap(), byte_value);
+                }
             }
         }
     }
