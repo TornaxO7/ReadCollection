@@ -130,6 +130,7 @@ pub trait RevRead {
             }
         }
     }
+
     fn rev_read_to_string(&mut self, _buf: &mut String) -> Result<usize> {
         todo!();
     }
@@ -774,6 +775,48 @@ mod tests {
                 assert_eq!(reference.rev_read_to_end(&mut buffer).ok(), Some(3));
                 assert!(reference.is_empty());
                 assert_eq!(&buffer, &data);
+            }
+        }
+
+        mod rev_read_buf_exact {
+            use super::*;
+
+            // `data.as_slice().read_buf_exact(cursor).unwrap()` panics as well
+            #[test]
+            #[should_panic]
+            fn empty_data() {
+                let data: [u8; 0] = [];
+                let mut buffer: [u8; 3] = [0; 3];
+
+                let mut buf = RevBorrowedBuf::from(buffer.as_mut_slice());
+                let cursor = buf.unfilled();
+
+                assert!(data.as_slice().rev_read_buf_exact(cursor).is_ok());
+            }
+
+            #[test]
+            fn buffer_smaller_than_data() {
+                let data: [u8; 3] = [1, 2, 3];
+                let mut buffer: [u8; 2] = [0; 2];
+
+                let mut buf = RevBorrowedBuf::from(buffer.as_mut_slice());
+                let cursor = buf.unfilled();
+
+                assert!(data.as_slice().rev_read_buf_exact(cursor).is_ok());
+                assert_eq!(&buffer, &[2, 3]);
+            }
+
+            // `data.as_slice().read_buf_exact(cursor).unwrap()` panics as well
+            #[test]
+            #[should_panic]
+            fn buffer_bigger_than_data() {
+                let data: [u8; 3] = [1, 2, 3];
+                let mut buffer: [u8; 4] = [0; 4];
+
+                let mut buf = RevBorrowedBuf::from(buffer.as_mut_slice());
+                let cursor = buf.unfilled();
+
+                data.as_slice().rev_read_buf_exact(cursor).unwrap();
             }
         }
 
