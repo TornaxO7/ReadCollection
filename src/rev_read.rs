@@ -134,8 +134,27 @@ pub trait RevRead {
     fn rev_read_to_string(&mut self, _buf: &mut String) -> Result<usize> {
         todo!();
     }
-    fn rev_read_exact(&mut self, _buf: &mut [u8]) -> Result<()> {
-        todo!();
+    fn rev_read_exact(&mut self, mut buf: &mut [u8]) -> Result<()> {
+        while !buf.is_empty() {
+            match self.rev_read(buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let buf_len = buf.len();
+                    buf = &mut buf[..buf_len - n];
+                }
+                Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
+            }
+        }
+
+        if !buf.is_empty() {
+            Err(std::io::Error::new(
+                ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            ))
+        } else {
+            Ok(())
+        }
     }
     fn rev_read_buf(&mut self, cursor: RevBorrowedCursor<'_>) -> Result<()> {
         default_rev_read_buf(|b| self.rev_read(b), cursor)
@@ -699,28 +718,6 @@ impl<T: RevBufRead> RevBufRead for RevTake<T> {
 }
 
 /// == default implementations ==
-// pub fn default_rev_read_exact<R: RevRead + ?Sized>(this: &mut R, mut buf: &mut [u8]) -> Result<()> {
-//     while !buf.is_empty() {
-//         match this.rev_read(buf) {
-//             Ok(0) => break,
-//             Ok(n) => {
-//                 let buf_len = buf.len();
-//                 buf = &mut buf[..buf_len - n];
-//             }
-//             Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
-//             Err(e) => return Err(e),
-//         }
-//     }
-//     if !buf.is_empty() {
-//         Err(std::io::Error::new(
-//             ErrorKind::UnexpectedEof,
-//             "failed to fill whole buffer",
-//         ))
-//     } else {
-//         Ok(())
-//     }
-// }
-
 pub fn default_rev_read_buf<F>(read: F, mut cursor: RevBorrowedCursor<'_>) -> Result<()>
 where
     F: FnOnce(&mut [u8]) -> Result<usize>,
@@ -775,6 +772,38 @@ mod tests {
                 assert_eq!(reference.rev_read_to_end(&mut buffer).ok(), Some(3));
                 assert!(reference.is_empty());
                 assert_eq!(&buffer, &data);
+            }
+        }
+
+        mod rev_read_exact {
+            use super::*;
+
+            #[test]
+            fn empty_buffer() {
+                let data: [u8; 3] = [1, 2, 3];
+                let mut buffer: [u8; 0] = [];
+
+                assert!(data.as_slice().rev_read_exact(&mut buffer).is_ok());
+            }
+
+            #[test]
+            fn buffer_bigger_than_data() {
+                let data: [u8; 3] = [1, 2, 3];
+                let mut buffer: [u8; 4] = [0; 4];
+
+                let result = data.as_slice().rev_read_exact(&mut buffer);
+                assert!(result.is_err());
+                let err = result.unwrap_err();
+                assert_eq!(err.kind(), ErrorKind::UnexpectedEof);
+            }
+
+            #[test]
+            fn general() {
+                let data: [u8; 3] = [1, 2, 3];
+                let mut buffer: [u8; 2] = [0; 2];
+
+                assert!(data.as_slice().rev_read_exact(&mut buffer).is_ok());
+                assert_eq!(&buffer, &[2, 3]);
             }
         }
 
