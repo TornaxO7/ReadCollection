@@ -3,6 +3,7 @@
 #![feature(maybe_uninit_write_slice)]
 #![feature(read_buf)]
 #![feature(ptr_as_uninit)]
+#![feature(core_io_borrowed_buf)]
 
 mod impls;
 mod rev_read;
