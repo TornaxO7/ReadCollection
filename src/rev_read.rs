@@ -4,7 +4,7 @@ use std::{
     slice,
 };
 
-use crate::{rev_read_borrowed_buf::RevBorrowedCursor, RevBorrowedBuf, DEFAULT_BUF_SIZE};
+use crate::{rev_read_borrowed_buf::RevBorrowedCursor, RevBorrowedBuf};
 
 /// Equals the [std::io::Read] trait, except that everything is in reverse.
 pub trait RevRead {
@@ -643,8 +643,9 @@ pub fn default_rev_read_to_end<R: RevRead + ?Sized>(
     let mut amount_read: usize = 0;
 
     loop {
-        match reader.rev_read(curr_buffer.as_mut_slice()) {
+        match reader.rev_read(curr_buffer) {
             Ok(amount) => {
+                println!("{}", amount);
                 if amount == 0 {
                     let mut final_buf = Vec::with_capacity(amount_read + dest_buf.len());
 
