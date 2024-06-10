@@ -42,14 +42,8 @@ pub trait RevRead {
 
         Ok(amount_bytes)
     }
-    fn rev_read_exact(&mut self, mut buf: &mut [u8]) -> Result<()> {
-        if !buf.is_empty() {
-            return Err(std::io::Error::new(
-                ErrorKind::InvalidInput,
-                "The provided buffer *must* be empty.",
-            ));
-        }
 
+    fn rev_read_exact(&mut self, mut buf: &mut [u8]) -> Result<()> {
         while !buf.is_empty() {
             match self.rev_read(buf) {
                 Ok(0) => break,

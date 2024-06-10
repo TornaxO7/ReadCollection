@@ -52,3 +52,16 @@ fn read_to_string_vs_rev_read_to_string() {
     assert_eq!(read_buffer, rev_read_buffer);
     assert_eq!(read_amount, rev_read_amount);
 }
+
+#[test]
+fn rev_read_exact() {
+    let mut file = get_file();
+
+    let mut read_buffer: [u8; 10] = [0; 10];
+    let mut rev_read_buffer: [u8; 10] = [0; 10];
+
+    file.read_exact(&mut read_buffer).unwrap();
+    file.rev_read_exact(&mut rev_read_buffer).unwrap();
+
+    assert_eq!(read_buffer, rev_read_buffer);
+}
