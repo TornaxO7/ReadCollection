@@ -30,6 +30,7 @@
               packages = with pkgs; [
                 cargo-release
                 cargo-llvm-cov
+                bugstalker
               ] ++ [ rust-toolchain ];
             };
         };
