@@ -65,24 +65,29 @@ pub trait RevRead {
             Ok(())
         }
     }
+
     fn rev_read_buf(&mut self, cursor: RevBorrowedCursor<'_>) -> Result<()> {
         default_rev_read_buf(|b| self.rev_read(b), cursor)
     }
+
     fn rev_read_buf_exact(&mut self, cursor: RevBorrowedCursor<'_>) -> Result<()> {
         default_rev_read_buf_exact(self, cursor)
     }
+
     fn rev_by_ref(&mut self) -> &mut Self
     where
         Self: Sized,
     {
         self
     }
+
     fn rev_bytes(self) -> RevBytes<Self>
     where
         Self: Sized,
     {
         RevBytes { inner: self }
     }
+
     fn rev_chain<R: RevRead>(self, next: R) -> RevChain<Self, R>
     where
         Self: Sized,
@@ -249,6 +254,7 @@ impl<R: RevRead> Iterator for RevBytes<R> {
         loop {
             return match self.inner.rev_read(slice::from_mut(&mut byte)) {
                 Ok(0) => None,
+                Err(e) if e.kind() == ErrorKind::Other => None,
                 Ok(..) => Some(Ok(byte)),
                 Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
                 Err(e) => Some(Err(e)),

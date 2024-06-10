@@ -1,6 +1,9 @@
-use std::{fs::File, io::Read};
+use std::{
+    fs::File,
+    io::{BorrowedBuf, Read, Seek},
+};
 
-use rev_read::RevRead;
+use rev_read::{RevBorrowedBuf, RevRead};
 
 fn get_file() -> File {
     File::open("./tests/file/test_file.txt").unwrap()
@@ -54,7 +57,7 @@ fn read_to_string_vs_rev_read_to_string() {
 }
 
 #[test]
-fn rev_read_exact() {
+fn read_exact_vs_rev_read_exact() {
     let mut file = get_file();
 
     let mut read_buffer: [u8; 10] = [0; 10];
@@ -62,6 +65,38 @@ fn rev_read_exact() {
 
     file.read_exact(&mut read_buffer).unwrap();
     file.rev_read_exact(&mut rev_read_buffer).unwrap();
+
+    assert_eq!(read_buffer, rev_read_buffer);
+}
+
+#[test]
+fn read_buf_vs_rev_read_buf() {
+    let mut file = get_file();
+
+    let mut read_buffer: Vec<u8> = Vec::new();
+    let mut rev_read_buffer: Vec<u8> = Vec::new();
+
+    let mut borrowed_read_buffer = BorrowedBuf::from(read_buffer.as_mut_slice());
+    let mut borrowed_rev_read_buffer = RevBorrowedBuf::from(rev_read_buffer.as_mut_slice());
+
+    let cursor_read_buffer = borrowed_read_buffer.unfilled();
+    let cursor_rev_read_buffer = borrowed_rev_read_buffer.unfilled();
+
+    file.read_buf(cursor_read_buffer).unwrap();
+    file.rev_read_buf(cursor_rev_read_buffer).unwrap();
+
+    assert_eq!(read_buffer, rev_read_buffer);
+}
+
+#[test]
+fn read_bytes_vs_rev_read_bytes() {
+    let file = get_file();
+    let mut file2 = file.try_clone().unwrap();
+    file2.seek(std::io::SeekFrom::End(0)).unwrap();
+
+    let read_buffer = file.bytes().map(|b| b.unwrap()).collect::<Vec<u8>>();
+    todo!("Issue: If the cursor reached the start of the file => How do we differ between the first time we reach there and 'ok, we've read all bytes now'?");
+    let rev_read_buffer = file2.rev_bytes().map(|b| b.unwrap()).collect::<Vec<u8>>();
 
     assert_eq!(read_buffer, rev_read_buffer);
 }
