@@ -38,3 +38,17 @@ fn read_to_end_vs_rev_read_to_end() {
     );
     assert_eq!(read_amount, rev_read_amount);
 }
+
+#[test]
+fn read_to_string_vs_rev_read_to_string() {
+    let mut file = get_file();
+
+    let mut read_buffer = String::new();
+    let mut rev_read_buffer = String::new();
+
+    let read_amount = file.read_to_string(&mut read_buffer).unwrap();
+    let rev_read_amount = file.rev_read_to_string(&mut rev_read_buffer).unwrap();
+
+    assert_eq!(read_buffer, rev_read_buffer);
+    assert_eq!(read_amount, rev_read_amount);
+}
