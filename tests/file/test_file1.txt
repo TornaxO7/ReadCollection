@@ -1,0 +1,3 @@
+Hello there!
+I hope that this text file is good enough to catch enough cases for the tests.
+See ya!
