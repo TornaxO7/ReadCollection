@@ -16,7 +16,7 @@ impl RevRead for File {
         let (_left, right) = buf.split_at_mut((buf_len - max_amount_read) as usize);
         match self.read(right) {
             Ok(n) => {
-                let offset = (max_amount_read - (n as u64)) as i64;
+                let offset = std::cmp::min(max_amount_read, n as u64) as i64;
                 self.seek(std::io::SeekFrom::Current(-offset))?;
                 return Ok(n);
             }

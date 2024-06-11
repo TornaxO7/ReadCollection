@@ -95,12 +95,13 @@ fn read_buf_vs_rev_read_buf() {
 #[test]
 fn read_bytes_vs_rev_read_bytes() {
     let file = get_file1();
-    let mut file2 = file.try_clone().unwrap();
+    let mut file2 = get_file1();
     file2.seek(std::io::SeekFrom::End(0)).unwrap();
 
     let read_buffer = file.bytes().map(|b| b.unwrap()).collect::<Vec<u8>>();
-    todo!("Issue: If the cursor reached the start of the file => How do we differ between the first time we reach there and 'ok, we've read all bytes now'?");
-    let rev_read_buffer = file2.rev_bytes().map(|b| b.unwrap()).collect::<Vec<u8>>();
+    // todo!("Issue: If the cursor reached the start of the file => How do we differ between the first time we reach there and 'ok, we've read all bytes now'?");
+    let mut rev_read_buffer = file2.rev_bytes().map(|b| b.unwrap()).collect::<Vec<u8>>();
+    rev_read_buffer.reverse();
 
     assert_eq!(read_buffer, rev_read_buffer);
 }
