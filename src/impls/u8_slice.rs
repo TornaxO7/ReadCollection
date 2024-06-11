@@ -2,7 +2,7 @@ use std::io::IoSliceMut;
 use std::{cmp, io::Read};
 
 use crate::RevBufRead;
-use crate::{rev_read_borrowed_buf::RevBorrowedCursor, RevRead};
+use crate::RevRead;
 
 /// As for the [`Read`] implementation of `&[u8]`, bytes get copied from the slice.
 ///
@@ -49,11 +49,6 @@ impl RevRead for &[u8] {
         Ok(amount_read)
     }
 
-    #[inline]
-    fn rev_is_read_vectored(&self) -> bool {
-        true
-    }
-
     fn rev_read_to_end(&mut self, buf: &mut Vec<u8>) -> std::io::Result<usize> {
         let len = self.len();
         buf.try_reserve(len)
@@ -93,16 +88,6 @@ impl RevRead for &[u8] {
 
         *self = tail;
 
-        Ok(())
-    }
-
-    fn rev_read_buf(&mut self, mut cursor: RevBorrowedCursor<'_>) -> std::io::Result<()> {
-        let amount = cmp::min(cursor.capacity(), self.len());
-        let (tail, head) = self.split_at(self.len() - amount);
-
-        cursor.append(head);
-
-        *self = tail;
         Ok(())
     }
 }
@@ -149,43 +134,6 @@ mod tests {
             let mut buffer = [0, 0, 0, 0];
 
             assert_eq!(values.as_slice().rev_read(&mut buffer).ok(), Some(3));
-            assert_eq!(buffer, [0, 1, 2, 3]);
-        }
-    }
-
-    mod rev_read_buf {
-        use super::RevRead;
-        use crate::RevBorrowedBuf;
-
-        #[test]
-        fn empty_cursor() {
-            let values: [u8; 3] = [1, 2, 3];
-            let mut buffer: [u8; 0] = [];
-            let mut borrowed_buf = RevBorrowedBuf::from(buffer.as_mut_slice());
-            let cursor = borrowed_buf.unfilled();
-
-            assert!(values.as_slice().rev_read_buf(cursor).is_ok());
-        }
-
-        #[test]
-        fn normal_cursor() {
-            let values: [u8; 3] = [1, 2, 3];
-            let mut buffer: [u8; 2] = [0, 0];
-            let mut borrowed_buf = RevBorrowedBuf::from(buffer.as_mut_slice());
-            let cursor = borrowed_buf.unfilled();
-
-            assert!(values.as_slice().rev_read_buf(cursor).is_ok());
-            assert_eq!(buffer, [2, 3]);
-        }
-
-        #[test]
-        fn cursor_longer_than_values() {
-            let values: [u8; 3] = [1, 2, 3];
-            let mut buffer: [u8; 4] = [0, 0, 0, 0];
-            let mut borrowed_buf = RevBorrowedBuf::from(buffer.as_mut_slice());
-            let cursor = borrowed_buf.unfilled();
-
-            assert!(values.as_slice().rev_read_buf(cursor).is_ok());
             assert_eq!(buffer, [0, 1, 2, 3]);
         }
     }

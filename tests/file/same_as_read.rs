@@ -3,7 +3,7 @@ use std::{
     io::{BorrowedBuf, Read, Seek},
 };
 
-use rev_read::{RevBorrowedBuf, RevRead};
+use rev_read::RevRead;
 
 fn get_file1() -> File {
     File::open("./tests/file/test_file1.txt").unwrap()
@@ -69,25 +69,6 @@ fn read_exact_vs_rev_read_exact() {
 
     file.read_exact(&mut read_buffer).unwrap();
     file.rev_read_exact(&mut rev_read_buffer).unwrap();
-
-    assert_eq!(read_buffer, rev_read_buffer);
-}
-
-#[test]
-fn read_buf_vs_rev_read_buf() {
-    let mut file = get_file1();
-
-    let mut read_buffer: Vec<u8> = Vec::new();
-    let mut rev_read_buffer: Vec<u8> = Vec::new();
-
-    let mut borrowed_read_buffer = BorrowedBuf::from(read_buffer.as_mut_slice());
-    let mut borrowed_rev_read_buffer = RevBorrowedBuf::from(rev_read_buffer.as_mut_slice());
-
-    let cursor_read_buffer = borrowed_read_buffer.unfilled();
-    let cursor_rev_read_buffer = borrowed_rev_read_buffer.unfilled();
-
-    file.read_buf(cursor_read_buffer).unwrap();
-    file.rev_read_buf(cursor_rev_read_buffer).unwrap();
 
     assert_eq!(read_buffer, rev_read_buffer);
 }
