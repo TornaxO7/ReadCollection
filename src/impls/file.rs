@@ -5,7 +5,7 @@ use std::{
 
 use crate::RevRead;
 
-impl RevRead for File {
+impl RevRead for &File {
     fn rev_read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let curr_pos = self.stream_position()?;
 
@@ -22,5 +22,11 @@ impl RevRead for File {
             }
             Err(err) => Err(err),
         }
+    }
+}
+
+impl RevRead for File {
+    fn rev_read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        (&*self).rev_read(buf)
     }
 }
