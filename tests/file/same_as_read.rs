@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BorrowedBuf, Read, Seek},
+    io::{Read, Seek},
 };
 
 use rev_read::RevRead;
@@ -18,7 +18,7 @@ fn read_vs_rev_read() {
     let mut file = get_file1();
 
     let mut read_buffer = [0u8; 5];
-    let mut rev_read_buffer = read_buffer.clone();
+    let mut rev_read_buffer = read_buffer;
 
     file.read(&mut read_buffer).unwrap();
     file.rev_read(&mut rev_read_buffer).unwrap();

@@ -34,7 +34,7 @@ pub trait RevRead {
             )
         })?;
 
-        rev_read_string.push_str(&buf);
+        rev_read_string.push_str(buf);
         *buf = rev_read_string;
 
         Ok(amount_bytes)
@@ -565,7 +565,7 @@ pub fn default_rev_read_to_end<R: RevRead + ?Sized>(
                     for buffer in buffers.into_iter().rev() {
                         final_buf.extend_from_slice(&buffer);
                     }
-                    final_buf.extend_from_slice(&dest_buf);
+                    final_buf.extend_from_slice(dest_buf);
                     *dest_buf = final_buf;
 
                     return Ok(amount_read);

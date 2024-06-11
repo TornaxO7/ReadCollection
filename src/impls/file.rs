@@ -18,9 +18,9 @@ impl RevRead for File {
             Ok(n) => {
                 let offset = std::cmp::min(max_amount_read, n as u64) as i64;
                 self.seek(std::io::SeekFrom::Current(-offset))?;
-                return Ok(n);
+                Ok(n)
             }
-            Err(err) => return Err(err),
+            Err(err) => Err(err),
         }
     }
 }
