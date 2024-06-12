@@ -8,7 +8,7 @@ homepage = "https://github.com/TornaxO7/BufReaderPlus"
 repository = "https://github.com/TornaxO7/BufReaderPlus"
 categories = ["caching"]
 license-file = "LICENSE"
-keywords = ["buffer", "reader", "bufreader"]
+keywords = ["buffer", "reader", "bufreader", "reverse"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
