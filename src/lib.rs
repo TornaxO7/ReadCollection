@@ -1,3 +1,4 @@
+//! This crate provides a collection of different variations of [std::io::Read].
 mod read_back;
 
 // Bare metal platforms usually have very small amounts of RAM

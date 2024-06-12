@@ -241,12 +241,13 @@ pub trait BufReadBack: ReadBack {
     }
 }
 
-/// An iterator over `u8` values of a rev-reader.
+/// An iterator over `u8` values of a read-back reader.
 ///
-/// This struct is generally created by calling [`rev_bytes`] on a reader.
-/// Please see the documentation of [`rev_bytes`] for more details.
+/// This struct is generally created by calling [`read_back_bytes`] on a [`ReadBack`] reader.
+/// Please see the documentation of [`read_back_bytes`] for more details.
 ///
-/// [`rev_bytes`]: RevRead::rev_bytes
+/// [`read_back_bytes`]: ReadBack::read_back_bytes
+/// [`ReadBack`]: ReadBack
 #[derive(Debug)]
 pub struct ReadBackBytes<R> {
     inner: R,
