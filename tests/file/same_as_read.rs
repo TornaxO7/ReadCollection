@@ -3,7 +3,7 @@ use std::{
     io::{Read, Seek},
 };
 
-use rev_read::ReadBack;
+use read_collection::ReadBack;
 
 fn get_file1() -> File {
     File::open("./tests/file/test_file1.txt").unwrap()

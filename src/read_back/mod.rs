@@ -1,3 +1,5 @@
+mod impls;
+
 use std::{
     cmp,
     io::{self, ErrorKind, IoSliceMut, Result},
@@ -6,23 +8,23 @@ use std::{
 
 use crate::DEFAULT_BUF_SIZE;
 
-/// A similar trait as [std::io::Read] trait that can be used to read back the content which you read with
-/// [std::io::Read::read].
+/// A trait to read back the content which has been read with the methods of [std::io::Read].
 pub trait ReadBack {
     /// Pull some bytes from this source into the specified buffer, returning how many bytes were read.
+    ///
     /// The same conditions have to be met as in [std::io::Read::read] except that instead of reading
     /// for example in a file, where you retrieve the bytes from "left to right", the bytes should
     /// be read from "right to left" and inserted at the beginning of the buffer first!
     ///
     /// # Example
     /// ```rust
-    /// use rev_read::RevRead;
+    /// use read_collection::ReadBack;
     ///
     /// fn main() {
     ///     let data = [1u8, 2u8];
     ///     let mut buffer: [u8; 3] = [0; 3];
     ///
-    ///     assert_eq!(data.as_slice().rev_read(&mut buffer).ok(), Some(2));
+    ///     assert_eq!(data.as_slice().read_back(&mut buffer).ok(), Some(2));
     ///     // notice here, that the values are added at the beginning of the array!
     ///     assert_eq!(&buffer, &[1, 2, 0]);
     /// }
@@ -39,27 +41,27 @@ pub trait ReadBack {
         self.read_back(buf)
     }
 
-    /// Can be also seen as `rev_read_to_start`.
+    /// Can be also seen as "read back until you reach the start of the source".
     ///
     /// Read all bytes until the start of the source, placing them into `buf`.
     fn read_back_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
-        default_rev_read_to_end(self, buf)
+        default_read_back_to_end(self, buf)
     }
 
     /// Read all bytes until the start of the source, **pre**pending them to `buf`.
     fn read_back_to_string(&mut self, buf: &mut String) -> Result<usize> {
         let mut bytes_buf = Vec::new();
-        let amount_bytes = default_rev_read_to_end(self, &mut bytes_buf)?;
+        let amount_bytes = default_read_back_to_end(self, &mut bytes_buf)?;
 
-        let mut rev_read_string = String::from_utf8(bytes_buf).map_err(|e| {
+        let mut read_back_string = String::from_utf8(bytes_buf).map_err(|e| {
             std::io::Error::new(
                 ErrorKind::InvalidData,
                 format!("Couldn't convert the rev-reader to a string: {}", e),
             )
         })?;
 
-        rev_read_string.push_str(buf);
-        *buf = rev_read_string;
+        read_back_string.push_str(buf);
+        *buf = read_back_string;
 
         Ok(amount_bytes)
     }
@@ -112,7 +114,7 @@ pub trait ReadBack {
     }
 }
 
-/// Equals the [std::io::BufRead] trait, except that everything is in reverse.
+/// TODO:
 pub trait BufReadBack: ReadBack {
     fn read_back_fill_buf(&mut self) -> io::Result<&[u8]>;
 
@@ -293,14 +295,14 @@ impl<T, U> ReadBackChain<T, U> {
     /// # Examples
     /// ```
     /// use std::io;
-    /// use rev_read::RevRead;
+    /// use read_collection::ReadBack;
     ///
     /// fn main() -> io::Result<()> {
     ///     let mut data1 = [1u8, 2u8, 3u8];
     ///     let mut data2 = [4u8, 5u8, 6u8];
     ///
-    ///     let rev_chain = data1.as_slice().rev_chain(data2.as_slice());
-    ///     let (data1, data2) = rev_chain.into_inner();
+    ///     let read_back_chain = data1.as_slice().read_back_chain(data2.as_slice());
+    ///     let (data1, data2) = read_back_chain.into_inner();
     ///     Ok(())
     /// }
     /// ```
@@ -312,16 +314,16 @@ impl<T, U> ReadBackChain<T, U> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// use std::io;
-    /// use rev_read::RevRead;
+    /// use read_collection::ReadBack;
     ///
     /// fn main() -> io::Result<()> {
     ///     let mut data1 = [1u8, 2u8, 3u8];
     ///     let mut data2 = [4u8, 5u8, 6u8];
     ///
-    ///     let rev_chain = data1.as_slice().rev_chain(data2.as_slice());
-    ///     let (data1, data2) = rev_chain.get_ref();
+    ///     let read_back_chain = data1.as_slice().read_back_chain(data2.as_slice());
+    ///     let (data1, data2) = read_back_chain.get_ref();
     ///     Ok(())
     /// }
     /// ```
@@ -337,16 +339,16 @@ impl<T, U> ReadBackChain<T, U> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// use std::io;
-    /// use rev_read::RevRead;
+    /// use read_collection::ReadBack;
     ///
     /// fn main() -> io::Result<()> {
     ///     let mut data1 = [1u8, 2u8, 3u8];
     ///     let mut data2 = [4u8, 5u8, 6u8];
     ///
-    ///     let mut rev_chain = data1.as_slice().rev_chain(data2.as_slice());
-    ///     let (data1, data2) = rev_chain.get_mut();
+    ///     let mut read_back_chain = data1.as_slice().read_back_chain(data2.as_slice());
+    ///     let (data1, data2) = read_back_chain.get_mut();
     ///     Ok(())
     /// }
     /// ```
@@ -559,7 +561,7 @@ impl<T: BufReadBack> BufReadBack for ReadBackTake<T> {
 }
 
 /// == default implementations ==
-pub fn default_rev_read_to_end<R: ReadBack + ?Sized>(
+pub fn default_read_back_to_end<R: ReadBack + ?Sized>(
     reader: &mut R,
     dest_buf: &mut Vec<u8>,
 ) -> Result<usize> {
@@ -601,7 +603,7 @@ pub fn default_rev_read_to_end<R: ReadBack + ?Sized>(
 mod tests {
     use super::*;
 
-    mod rev_read {
+    mod read_back {
         use super::*;
 
         mod rev_read_to_end {
