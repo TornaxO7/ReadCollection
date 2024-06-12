@@ -201,6 +201,7 @@ pub trait ReadBack {
     /// Creates an adapter which will read at most `limit` bytes from it.
     ///
     /// # Example
+    ///
     /// ```
     /// use read_collection::ReadBack;
     ///
@@ -225,118 +226,112 @@ pub trait ReadBack {
     }
 }
 
-/// TODO:
+/// A `BufReadBack` is a type of [`ReadBack`]er which has an internal buffer, allowing it to perform extra ways of reading.
+///
+/// It behaves the same as [`BufRead`] except that it uses [`ReadBack`] internally.
+///
+/// [`ReadBack`]: ReadBack
+/// [`BufRead`]: std::io::BufRead
 pub trait BufReadBack: ReadBack {
+    /// Returns the contents of the internal buffer, filling it with more data from the inner reader if it is empty.
+    ///
+    /// This function is a lower-level call.
+    /// It needs to be paired with the [`read_back_consume`] method to function properly.
+    /// When calling this method, none of the contents will be "read back" in the sense that later calling [`read_back`] may return the same contents.
+    /// As such, consume must be called with the number of bytes that are consumed from this buffer to ensure that the bytes are never returned twice.
+    ///
+    /// An empty buffer returned indicates that the stream has reached the beginning again.
+    ///
+    /// # Error
+    /// This function will return an I/O error if the underlying reader was read, but returned an error.
+    ///
+    /// # Example
+    /// TODO
+    ///
+    /// [`read_back_consume`]: BufReadBack::read_back_consume
+    /// [`read_back`]: ReadBack::read_back
     fn read_back_fill_buf(&mut self) -> io::Result<&[u8]>;
 
+    /// Tells this buffer that `amt` bytes have been consumed from the buffer, so they should no longer be returned in calls to [`read_back`].
+    ///
+    /// It basically behaves the same as [`BufRead::consume`] except that you should combine this with [`read_back_fill_buf`].
+    ///
+    /// [`read_back_fill_buf`]: BufReadBack::read_back_fill_buf
+    /// [`BufRead::consume`]: std::io::BufRead::consume
+    /// [`read_back`]: ReadBack::read_back
     fn read_back_consume(&mut self, amt: usize);
 
-    /// Check if the underlying `RevRead` has any data left to be read.
+    /// Check if the underlying [`ReadBack`] has any data left to be read.
     ///
     /// This function may fill the buffer to check for data,
     /// so this functions returns `Result<bool>`, not `bool`.
     ///
-    /// Default implementation calls `rev_fill_buf` and checks that
+    /// Default implementation calls [`read_back_fill_buf`] and checks that
     /// returned slice is empty (which means that there is no data left,
-    /// since EOF is reached).
+    /// since the start is reached).
+    ///
+    /// # Example
+    /// TODO
+    ///
+    /// [`ReadBack`]: ReadBack
+    /// [`read_back_fill_buf`]: BufReadBack::read_back_fill_buf
     fn read_back_has_data_left(&mut self) -> io::Result<bool> {
         self.read_back_fill_buf().map(|buffer| buffer.is_empty())
     }
 
+    /// Read all bytes into `buf` until the delimiter `byte` or the beginning of the reader is reached.
+    ///
+    /// This function will read bytes from the underlying stream until the delimiter or the beginning of the reader is reached.
+    /// Once found, all bytes up to, and including, the delimiter (if found) will be appended to buf.
+    ///
+    /// If successful, this function will return the total number of bytes read.
+    ///
+    /// # Example
+    /// TODO
     fn read_back_until(&mut self, delim: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
-        let mut amount_read = 0;
-
-        loop {
-            let (done, used) = {
-                let new_read = match self.read_back_fill_buf() {
-                    Ok(n) => n,
-                    Err(err) if err.kind() == ErrorKind::Interrupted => continue,
-                    Err(err) => return Err(err),
-                };
-                match memchr::memrchr(delim, new_read) {
-                    Some(index) => {
-                        let used = new_read.len() - index;
-
-                        let mut new_buf = Vec::with_capacity(buf.len() + used);
-                        new_buf.extend_from_slice(&new_read[index..]);
-                        new_buf.extend_from_slice(buf);
-                        *buf = new_buf;
-
-                        (true, used)
-                    }
-                    None => {
-                        let mut new_buf = Vec::with_capacity(buf.len() + new_read.len());
-                        new_buf.extend_from_slice(new_read);
-                        new_buf.extend_from_slice(buf);
-                        *buf = new_buf;
-
-                        (false, new_read.len())
-                    }
-                }
-            };
-
-            self.read_back_consume(used);
-            amount_read += used;
-            if done || used == 0 {
-                return Ok(amount_read);
-            }
-        }
+        default_buf_read_back_until(self, delim, buf)
     }
 
+    /// Skip all bytes until the delimiter byte or the beginning is reached.
+    ///
+    /// This function will read (and discard) bytes from the underlying stream until the delimiter or EOF is found.
+    ///
+    /// If successful, this function will return the total number of bytes read, including the delimiter byte.
+    ///
+    /// This is useful for efficiently skipping data such as NUL-terminated strings in binary file formats without buffering.
+    ///
+    /// # Example
     fn read_back_skip_until(&mut self, delim: u8) -> io::Result<usize> {
-        let mut amount_read: usize = 0;
-
-        loop {
-            let (done, used) = {
-                let new_read = match self.read_back_fill_buf() {
-                    Ok(n) => n,
-                    Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
-                    Err(e) => return Err(e),
-                };
-
-                match memchr::memrchr(delim, new_read) {
-                    Some(index) => (true, new_read.len() - index),
-                    None => (false, new_read.len()),
-                }
-            };
-
-            self.read_back_consume(used);
-            amount_read += used;
-            if done || used == 0 {
-                return Ok(amount_read);
-            }
-        }
+        default_buf_read_skip_until(self, delim)
     }
 
+    /// Read all bytes until a newline (the `0xA` byte) is reached, and *prepend* them to the provided String buffer.
+    ///
+    /// This function also behaves similar as [`BufRead::read_line`] except that it uses the functions of [`ReadBack`] instead
+    /// of [`Read`].
+    ///
+    /// # Example
+    /// TODO
+    ///
+    /// [`BufRead::read_line`]: std::io::BufRead::read_line
+    /// [`clear`]: std::string::String::clear
+    /// [`ReadBack`]: ReadBack
+    /// [`Read`]: std::io::Read
     fn read_back_line(&mut self, dest: &mut String) -> io::Result<usize> {
-        let mut buffer = Vec::with_capacity(crate::DEFAULT_BUF_SIZE);
-
-        let mut amount_read = self.read_back_until(b'\n', &mut buffer)?;
-        if self
-            .read_back_fill_buf()?
-            .last()
-            .map(|&c| c == b'\r')
-            .unwrap_or(false)
-        {
-            let mut new_buf = Vec::with_capacity(buffer.len() + 1);
-            new_buf.push(b'\r');
-            new_buf.extend_from_slice(&buffer);
-            buffer = new_buf;
-            amount_read += 1;
-            self.read_back_consume(1);
-        }
-
-        match String::from_utf8(buffer) {
-            Ok(mut line) => {
-                line.push_str(dest);
-                *dest = line;
-
-                Ok(amount_read)
-            }
-            Err(err) => Err(io::Error::new(ErrorKind::InvalidData, err)),
-        }
+        default_buf_read_back_line(self, dest)
     }
 
+    /// Returns an iterator over the contents of this reader split on the byte byte.
+    ///
+    /// This function also behaves similar as [`BufRead::split`] except that it uses the functions of [`ReadBack`] instead
+    /// of [`Read`].
+    ///
+    /// # Example
+    /// TODO
+    ///
+    /// [`BufRead::split`]: std::io::BufRead::split
+    /// [`ReadBack`]: ReadBack
+    /// [`Read`]: std::io::Read
     fn read_back_split(self, delim: u8) -> ReadBackSplit<Self>
     where
         Self: Sized,
@@ -344,6 +339,17 @@ pub trait BufReadBack: ReadBack {
         ReadBackSplit { buf: self, delim }
     }
 
+    /// Returns an iterator over the lines of this reader.
+    ///
+    /// This function also behaves similar as [`BufRead::lines`] except that it uses the functions of [`ReadBack`] instead
+    /// of [`Read`].
+    ///
+    /// # Example
+    /// TODO
+    ///
+    /// [`BufRead::lines`]: std::io::BufRead::lines
+    /// [`ReadBack`]: ReadBack
+    /// [`Read`]: std::io::Read
     fn read_back_lines(self) -> RevLines<Self>
     where
         Self: Sized,
@@ -769,5 +775,105 @@ fn default_read_back_exact<R: ReadBack + ?Sized>(r: &mut R, mut buf: &mut [u8]) 
         ))
     } else {
         Ok(())
+    }
+}
+
+fn default_buf_read_back_until<R: BufReadBack + ?Sized>(
+    r: &mut R,
+    delim: u8,
+    buf: &mut Vec<u8>,
+) -> io::Result<usize> {
+    let mut amount_read = 0;
+
+    loop {
+        let (done, used) = {
+            let new_read = match r.read_back_fill_buf() {
+                Ok(n) => n,
+                Err(err) if err.kind() == ErrorKind::Interrupted => continue,
+                Err(err) => return Err(err),
+            };
+            match memchr::memrchr(delim, new_read) {
+                Some(index) => {
+                    let used = new_read.len() - index;
+
+                    let mut new_buf = Vec::with_capacity(buf.len() + used);
+                    new_buf.extend_from_slice(&new_read[index..]);
+                    new_buf.extend_from_slice(buf);
+                    *buf = new_buf;
+
+                    (true, used)
+                }
+                None => {
+                    let mut new_buf = Vec::with_capacity(buf.len() + new_read.len());
+                    new_buf.extend_from_slice(new_read);
+                    new_buf.extend_from_slice(buf);
+                    *buf = new_buf;
+
+                    (false, new_read.len())
+                }
+            }
+        };
+
+        r.read_back_consume(used);
+        amount_read += used;
+        if done || used == 0 {
+            return Ok(amount_read);
+        }
+    }
+}
+
+fn default_buf_read_skip_until<R: BufReadBack + ?Sized>(r: &mut R, delim: u8) -> Result<usize> {
+    let mut amount_read: usize = 0;
+
+    loop {
+        let (done, used) = {
+            let new_read = match r.read_back_fill_buf() {
+                Ok(n) => n,
+                Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
+            };
+
+            match memchr::memrchr(delim, new_read) {
+                Some(index) => (true, new_read.len() - index),
+                None => (false, new_read.len()),
+            }
+        };
+
+        r.read_back_consume(used);
+        amount_read += used;
+        if done || used == 0 {
+            return Ok(amount_read);
+        }
+    }
+}
+
+fn default_buf_read_back_line<R: BufReadBack + ?Sized>(
+    r: &mut R,
+    dest: &mut String,
+) -> io::Result<usize> {
+    let mut buffer = Vec::with_capacity(crate::DEFAULT_BUF_SIZE);
+
+    let mut amount_read = r.read_back_until(b'\n', &mut buffer)?;
+    if r.read_back_fill_buf()?
+        .last()
+        .map(|&c| c == b'\r')
+        .unwrap_or(false)
+    {
+        let mut new_buf = Vec::with_capacity(buffer.len() + 1);
+        new_buf.push(b'\r');
+        new_buf.extend_from_slice(&buffer);
+        buffer = new_buf;
+        amount_read += 1;
+        r.read_back_consume(1);
+    }
+
+    match String::from_utf8(buffer) {
+        Ok(mut line) => {
+            line.push_str(dest);
+            *dest = line;
+
+            Ok(amount_read)
+        }
+        Err(err) => Err(io::Error::new(ErrorKind::InvalidData, err)),
     }
 }

@@ -90,6 +90,20 @@ impl BufReadBack for &[u8] {
         Ok(*self)
     }
 
+    /// Instead of consuming from left to right, we're consuming the bytes from right to left.
+    ///
+    /// # Example
+    /// ```rust
+    /// use read_collection::BufReadBack;
+    ///
+    /// fn main() {
+    ///     let data: [u8; 3] = [1, 2, 3];
+    ///     let mut reference = data.as_slice();
+    ///
+    ///     reference.read_back_consume(1);
+    ///     assert_eq!(reference, &[1, 2]);
+    /// }
+    /// ```
     fn read_back_consume(&mut self, amt: usize) {
         let end = self.len().saturating_sub(amt);
         *self = &self[..end];
