@@ -22,7 +22,7 @@ fn main() {
 ```
 
 # Status
-Implement:
+Implemented:
 - [ ] `ReadBack` for reading back *duh*
   - [x] `ReadBack` trait
     - [x] for `&[u8]`
