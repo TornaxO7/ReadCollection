@@ -116,6 +116,24 @@ pub trait ReadBack {
         default_read_back_to_string(self, buf)
     }
 
+    /// Read back the exact number of bytes required to fill `buf`.
+    ///
+    /// The conditions for [`Read::read_exact`] apply here as well.
+    ///
+    /// # Example
+    /// ```
+    /// use read_collection::ReadBack;
+    ///
+    /// fn main() {
+    ///     let values = [1, 2, 3];
+    ///     let mut buffer = [0, 0];
+    ///
+    ///     assert!(values.as_slice().read_back_exact(&mut buffer).is_ok());
+    ///     assert_eq!(buffer, [2, 3]);
+    /// }
+    /// ```
+    ///
+    /// [`Read::read_exact`]: std::io::Read::read_exact
     fn read_back_exact(&mut self, buf: &mut [u8]) -> Result<()> {
         default_read_back_exact(self, buf)
     }
@@ -687,7 +705,7 @@ fn default_read_back_exact<R: ReadBack + ?Sized>(r: &mut R, mut buf: &mut [u8]) 
     if !buf.is_empty() {
         Err(std::io::Error::new(
             ErrorKind::UnexpectedEof,
-            "failed to fill whole buffer",
+            "Failed to fill whole buffer.",
         ))
     } else {
         Ok(())

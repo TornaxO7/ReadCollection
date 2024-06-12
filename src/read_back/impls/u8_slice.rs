@@ -1,5 +1,5 @@
+use std::cmp;
 use std::io::IoSliceMut;
-use std::{cmp, io::Read};
 
 use crate::BufReadBack;
 use crate::ReadBack;
@@ -202,6 +202,7 @@ mod tests {
 
         mod read_back_exact {
             use super::ReadBack;
+
             #[test]
             fn empty_buf() {
                 let values = [1, 2, 3];
@@ -226,6 +227,14 @@ mod tests {
 
                 assert!(values.as_slice().read_back_exact(&mut buffer).is_ok());
                 assert_eq!(buffer, [1, 2, 3]);
+            }
+
+            #[test]
+            fn buffer_bigger_than_data() {
+                let data = [1, 2, 3];
+                let mut buffer = [0; 4];
+
+                assert!(data.as_slice().read_back_exact(&mut buffer).is_err());
             }
         }
 
