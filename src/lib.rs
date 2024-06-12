@@ -26,7 +26,7 @@
 //! }
 //! ```
 //! Output:
-//! ```
+//! ```text
 //! With Read: buffer = [1]
 //! With ReadBack: buffer = [3]
 //! ```

@@ -9,6 +9,30 @@ use std::{
 use crate::DEFAULT_BUF_SIZE;
 
 /// A trait to read back the content which has been read with the methods of [std::io::Read].
+///
+/// # Example
+/// ```no_run
+/// use read_collection::ReadBack;
+/// use std::io::Read;
+/// use std::fs::File;
+///
+/// fn main() {
+///     let mut file = File::open("some/path").unwrap();
+///     let mut read_buffer: [u8; 10] = [0; 10];
+///     let mut read_back_buffer: [u8; 10] = [0; 10];
+///
+///     // well, let's read some stuff!
+///     file.read(&mut read_buffer).unwrap();
+///
+///     // do some work and somehow clear the `read_buffer`
+///     // ....
+///
+///     // why not read it again?
+///     file.read_back(&mut read_back_buffer).unwrap();
+///
+///     assert_eq!(read_buffer, read_back_buffer);
+/// }
+/// ```
 pub trait ReadBack {
     /// Pull some bytes from this source into the specified buffer, returning how many bytes were read.
     ///
@@ -23,10 +47,16 @@ pub trait ReadBack {
     /// fn main() {
     ///     let data = [1u8, 2u8];
     ///     let mut buffer: [u8; 3] = [0; 3];
+    ///     let mut small_buffer: [u8; 1] = [0];
     ///
     ///     assert_eq!(data.as_slice().read_back(&mut buffer).ok(), Some(2));
+    ///     assert_eq!(data.as_slice().read_back(&mut small_buffer).ok(), Some(1));
+    ///
     ///     // notice here, that the values are added at the beginning of the array!
     ///     assert_eq!(&buffer, &[1, 2, 0]);
+    ///
+    ///     // notice here that the last value of data gets inserted "first"
+    ///     assert_eq!(&small_buffer, &[2]);
     /// }
     /// ```
     fn read_back(&mut self, buf: &mut [u8]) -> Result<usize>;
