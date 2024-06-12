@@ -277,12 +277,13 @@ impl<R: ReadBack> Iterator for ReadBackBytes<R> {
     }
 }
 
-/// Adapter to chain together two rev-readers.
+/// Adapter to chain together two [`ReadBack`]s.
 ///
-/// This struct is generally created by calling [`rev_chain`] on a reader.
-/// Please see the documentation of [`rev_chain`] for more details.
+/// This struct is generally created by calling [`read_back_chain`] on a reader.
+/// Please see the documentation of [`read_back_chain`] for more details.
 ///
-/// [`rev_chain`]: RevRead::rev_chain
+/// [`ReadBack`]: ReadBack
+/// [`read_back_chain`]: ReadBack::read_back_chain
 #[derive(Debug)]
 pub struct ReadBackChain<T, U> {
     first: T,
@@ -291,7 +292,7 @@ pub struct ReadBackChain<T, U> {
 }
 
 impl<T, U> ReadBackChain<T, U> {
-    /// Consumes the `RevChain`, returning the wrapped rev-readers.
+    /// Consumes the [`ReadBackChain`], returning the wrapped [readers].
     ///
     /// # Examples
     /// ```
@@ -299,19 +300,22 @@ impl<T, U> ReadBackChain<T, U> {
     /// use read_collection::ReadBack;
     ///
     /// fn main() -> io::Result<()> {
-    ///     let mut data1 = [1u8, 2u8, 3u8];
-    ///     let mut data2 = [4u8, 5u8, 6u8];
+    ///     let mut data1: [u8; 3] = [1, 2, 3];
+    ///     let mut data2: [u8; 3] = [4, 5, 6];
     ///
     ///     let read_back_chain = data1.as_slice().read_back_chain(data2.as_slice());
     ///     let (data1, data2) = read_back_chain.into_inner();
     ///     Ok(())
     /// }
     /// ```
+    ///
+    /// [`ReadBackChain`]: ReadBackChain
+    /// [readers]: ReadBack
     pub fn into_inner(self) -> (T, U) {
         (self.first, self.second)
     }
 
-    /// Gets references to the underlying readers in this `RevChain`.
+    /// Gets references to the underlying [readers] in this [`ReadBackChain`].
     ///
     /// # Examples
     ///
@@ -320,23 +324,26 @@ impl<T, U> ReadBackChain<T, U> {
     /// use read_collection::ReadBack;
     ///
     /// fn main() -> io::Result<()> {
-    ///     let mut data1 = [1u8, 2u8, 3u8];
-    ///     let mut data2 = [4u8, 5u8, 6u8];
+    ///     let mut data1: [u8; 3] = [1, 2, 3];
+    ///     let mut data2: [u8; 3] = [4, 5, 6];
     ///
     ///     let read_back_chain = data1.as_slice().read_back_chain(data2.as_slice());
     ///     let (data1, data2) = read_back_chain.get_ref();
     ///     Ok(())
     /// }
     /// ```
+    ///
+    /// [`ReadBackChain`]: ReadBackChain
+    /// [readers]: ReadBack
     pub fn get_ref(&self) -> (&T, &U) {
         (&self.first, &self.second)
     }
 
-    /// Gets mutable references to the underlying readers in this `Chain`.
+    /// Gets mutable references to the underlying [readers] in this [`ReadBackChain`].
     ///
     /// Care should be taken to avoid modifying the internal I/O state of the
-    /// underlying readers as doing so may corrupt the internal state of this
-    /// `Chain`.
+    /// underlying [readers] as doing so may corrupt the internal state of this
+    /// [`ReadBackChain`].
     ///
     /// # Examples
     ///
@@ -345,14 +352,17 @@ impl<T, U> ReadBackChain<T, U> {
     /// use read_collection::ReadBack;
     ///
     /// fn main() -> io::Result<()> {
-    ///     let mut data1 = [1u8, 2u8, 3u8];
-    ///     let mut data2 = [4u8, 5u8, 6u8];
+    ///     let mut data1: [u8; 3] = [1, 2, 3];
+    ///     let mut data2: [u8; 3] = [4, 5, 6];
     ///
     ///     let mut read_back_chain = data1.as_slice().read_back_chain(data2.as_slice());
     ///     let (data1, data2) = read_back_chain.get_mut();
     ///     Ok(())
     /// }
     /// ```
+    ///
+    /// [`ReadBackChain`]: ReadBackChain
+    /// [readers]: ReadBack
     pub fn get_mut(&mut self) -> (&mut T, &mut U) {
         (&mut self.first, &mut self.second)
     }
