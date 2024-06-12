@@ -138,6 +138,28 @@ pub trait ReadBack {
         default_read_back_exact(self, buf)
     }
 
+    /// Transforms this `ReadBack` instance to an `Iterator` over its bytes.
+    /// This can be also seen as "read the bytes of the instance in reverse".
+    ///
+    /// The same conditions of [`Read::bytes`] apply here as well.
+    ///
+    /// # Example
+    /// ```
+    /// use read_collection::ReadBack;
+    ///
+    /// fn main() {
+    ///     let data = [1, 2, 3];
+    ///
+    ///     let mut iterator = data.as_slice().read_back_bytes();
+    ///     let read_back_bytes = iterator
+    ///         .map(|b| b.unwrap())
+    ///         .collect::<Vec<u8>>();
+    ///
+    ///     assert_eq!(read_back_bytes, [3, 2, 1].to_vec());
+    /// }
+    /// ```
+    ///
+    /// [`Read::bytes`]: std::io::Read::bytes
     fn read_back_bytes(self) -> ReadBackBytes<Self>
     where
         Self: Sized,
@@ -145,6 +167,26 @@ pub trait ReadBack {
         ReadBackBytes { inner: self }
     }
 
+    /// Creates an adapter which will chain this stream with another.
+    ///
+    /// # Example
+    /// ```
+    /// use read_collection::ReadBack;
+    ///
+    /// fn main() {
+    ///     let first_data = b"First in the chain.";
+    ///     let second_data = b" Second in the chain.";
+    ///     let total_length = first_data.len() + second_data.len();
+    ///     let mut buffer: Vec<u8> = vec![0; total_length];
+    ///
+    ///     let mut chain = first_data.read_back_chain(second_data.as_slice());
+    ///
+    ///     assert_eq!(chain.read_back(&mut buffer).ok(), Some(first_data.len()));
+    ///     assert_eq!(chain.read_back(&mut buffer[first_data.len()..]).ok(), Some(second_data.len()));
+    ///
+    ///     assert_eq!(String::from_utf8(buffer).unwrap(), "First in the chain. Second in the chain.".to_string());
+    /// }
+    /// ```
     fn read_back_chain<R: ReadBack>(self, next: R) -> ReadBackChain<Self, R>
     where
         Self: Sized,
@@ -155,6 +197,26 @@ pub trait ReadBack {
             done_first: false,
         }
     }
+
+    /// Creates an adapter which will read at most `limit` bytes from it.
+    ///
+    /// # Example
+    /// ```
+    /// use read_collection::ReadBack;
+    ///
+    /// fn main() {
+    ///     let data: [u8; 3] = [1, 2, 3];
+    ///     let mut buffer: [u8; 3] = [0; 3];
+    ///
+    ///     let mut take = data.as_slice().read_back_take(2);
+    ///
+    ///     assert_eq!(take.read_back(&mut buffer).ok(), Some(2));
+    ///     // we've already read 2, so we reached the limit
+    ///     assert_eq!(take.read_back(&mut buffer).ok(), Some(0));
+    ///
+    ///     assert_eq!(buffer, [2, 3, 0]);
+    /// }
+    /// ```
     fn read_back_take(self, limit: u64) -> ReadBackTake<Self>
     where
         Self: Sized,
@@ -589,10 +651,8 @@ impl<T: ReadBack> ReadBack for ReadBackTake<T> {
             return Ok(0);
         }
 
-        let buf_len = buf.len();
-
-        let max = cmp::min(buf_len as u64, self.limit) as usize;
-        let n = self.inner.read_back(&mut buf[buf_len - max..])?;
+        let max = cmp::min(buf.len() as u64, self.limit) as usize;
+        let n = self.inner.read_back(&mut buf[..max])?;
         assert!(n as u64 <= self.limit, "number of read bytes exceeds limit");
         self.limit -= n as u64;
         Ok(n)

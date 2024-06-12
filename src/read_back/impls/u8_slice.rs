@@ -245,7 +245,7 @@ mod tests {
                 use super::*;
 
                 #[test]
-                fn zero_rev_take() {
+                fn limit_0() {
                     let data: [u8; 3] = [1, 2, 3];
                     let mut buffer: [u8; 3] = [0, 0, 0];
                     let mut take = data.as_slice().read_back_take(0);
@@ -255,23 +255,23 @@ mod tests {
                 }
 
                 #[test]
-                fn middle_rev_take() {
+                fn limit_middle() {
                     let data: [u8; 3] = [1, 2, 3];
                     let mut buffer: [u8; 2] = [0, 0];
                     let mut take = data.as_slice().read_back_take(1);
 
                     assert_eq!(take.read_back(&mut buffer).ok(), Some(1));
-                    assert_eq!(&buffer, &[0, 3]);
+                    assert_eq!(&buffer, &[3, 0]);
                 }
 
                 #[test]
-                fn fill_rev_take() {
+                fn no_limit() {
                     let data: [u8; 3] = [1, 2, 3];
                     let mut buffer: [u8; 4] = [0; 4];
                     let mut take = data.as_slice().read_back_take(data.len() as u64);
 
                     assert_eq!(take.read_back(&mut buffer).ok(), Some(data.len()));
-                    assert_eq!(&buffer, &[0, 1, 2, 3]);
+                    assert_eq!(&buffer, &[1, 2, 3, 0]);
                 }
             }
         }
@@ -534,9 +534,9 @@ mod tests {
 
                 let mut buffer: Vec<u8> = Vec::new();
 
-                let mut rev_chain = data1.as_slice().read_back_chain(data2.as_slice());
+                let mut chain = data1.as_slice().read_back_chain(data2.as_slice());
 
-                assert_eq!(rev_chain.read_back(&mut buffer).ok(), Some(0));
+                assert_eq!(chain.read_back(&mut buffer).ok(), Some(0));
                 assert!(buffer.is_empty());
             }
 
@@ -547,10 +547,39 @@ mod tests {
 
                 let mut buffer: [u8; 4] = [0; 4];
 
-                let mut rev_chain = data1.as_slice().read_back_chain(data2.as_slice());
+                let mut chain = data1.as_slice().read_back_chain(data2.as_slice());
 
-                assert_eq!(rev_chain.read_back(&mut buffer).ok(), Some(3));
+                assert_eq!(chain.read_back(&mut buffer).ok(), Some(3));
                 assert_eq!(&buffer, &[1, 2, 3, 0]);
+            }
+
+            #[test]
+            fn second_chain_full() {
+                let data1: [u8; 0] = [];
+                let data2: [u8; 3] = [1, 2, 3];
+
+                let mut buffer: [u8; 4] = [0; 4];
+                let mut chain = data1.as_slice().read_back_chain(data2.as_slice());
+
+                assert_eq!(chain.read_back(&mut buffer).ok(), Some(3));
+                assert_eq!(&buffer, &[1, 2, 3, 0]);
+            }
+
+            #[test]
+            fn first_and_second_half() {
+                let data1: [u8; 2] = [1, 2];
+                let data2: [u8; 2] = [3, 4];
+
+                let mut buffer: [u8; 4] = [0; 4];
+                let mut chain = data1.as_slice().read_back_chain(data2.as_slice());
+
+                // read data1
+                assert_eq!(chain.read_back(&mut buffer).ok(), Some(2));
+                assert_eq!(&buffer, &[1, 2, 0, 0]);
+
+                // read data2
+                assert_eq!(chain.read_back(&mut buffer).ok(), Some(2));
+                assert_eq!(&buffer, &[3, 4, 0, 0]);
             }
         }
 
