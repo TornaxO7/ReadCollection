@@ -27,21 +27,21 @@ Implement:
   - [x] `ReadBack` trait
     - [x] for `&[u8]`
     - [x] for [`File`] (and `&File`)
-    - [x] for `Empty`
+    - [x] for [`Empty`]
   - [ ] `BufReadBack` trait
     - [ ] for `&[u8]`
-    - [x] for `Empty`
+    - [x] for [`Empty`]
     - [ ] `BufReadBacker` struct
  - [ ] `RevRead` for reading reversed
    - [ ] `RevRead` trait
      - [ ] for `&[u8]`
      - [ ] for [`File`] (and `&File`)
-     - [ ] for `Empty`
+     - [ ] for [`Empty`]
    - [ ] `BufRevRead` trait
      - [ ] for `&[u8]`
-     - [ ] for `Empty`
+     - [ ] for [`Empty`]
      - [ ] `BufRevReader` struct
 
-[`&[u8]`]: https://doc.rust-lang.org/std/primitive.u8.html
 [`File`]: https://doc.rust-lang.org/std/fs/struct.File.html
 [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
+[`Empty`]: https://doc.rust-lang.org/std/io/struct.Empty.html
