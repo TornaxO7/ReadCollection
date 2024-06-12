@@ -1,12 +1,12 @@
 [package]
 name = "read_collection"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["TornaxO7 <tornax@pm.me>"]
 description = "A collection of different variants of the `std::io::Read` trait."
-homepage = "https://github.com/TornaxO7/BufReaderPlus"
-repository = "https://github.com/TornaxO7/BufReaderPlus"
-categories = ["caching"]
+homepage = "https://github.com/TornaxO7/ReadCollection"
+repository = "https://github.com/TornaxO7/ReadCollection"
+categories = ["parsing"]
 license-file = "LICENSE"
 keywords = ["buffer", "reader", "bufreader", "reverse"]
 
