@@ -13,26 +13,14 @@ impl ReadBack for &[u8] {
         let self_len = self.len();
 
         let amount = cmp::min(buf_len, self_len);
-        let (tail, head) = self.split_at(self_len - amount);
-
+        let (left, right) = self.split_at(self_len - amount);
         if amount == 1 {
-            // SAFETY:
-            //  - If amount == 1 == buf.len(), then there's at least one value!
-            //  - If buf.len() < 1 => amount < 1 as well => not possible
-            //  - otherwise buf.len() > 1
-            let buf_last = buf.last_mut().unwrap();
-            // SAFETY:
-            //  - If amount == 1 == self.len(), then `tail` would be empty and `head` would get the value
-            //  - If self.len() < 1 => amount < 1 as well => not possible
-            //  - otherwise self.len() > 1
-            let head_last = head.last().unwrap();
-
-            *buf_last = *head_last;
+            buf[0] = right[0];
         } else {
-            buf[buf_len - amount..].copy_from_slice(head);
+            buf[..amount].copy_from_slice(right);
         }
 
-        *self = tail;
+        *self = left;
 
         Ok(amount)
     }
@@ -548,7 +536,7 @@ mod tests {
                 let mut rev_chain = data1.as_slice().read_back_chain(data2.as_slice());
 
                 assert_eq!(rev_chain.read_back(&mut buffer).ok(), Some(3));
-                assert_eq!(&buffer, &[0, 1, 2, 3]);
+                assert_eq!(&buffer, &[1, 2, 3, 0]);
             }
         }
 
