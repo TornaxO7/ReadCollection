@@ -8,8 +8,13 @@ use crate::DEFAULT_BUF_SIZE;
 
 /// Equals the [std::io::Read] trait, except that everything is in reverse.
 pub trait RevRead {
+    /// Pull some bytes from this source into the specified buffer, returning how many bytes were read.
+    /// The same conditions have to be met as in [std::io::Read::read] except that instead of reading
+    /// for example in a file, where you retrieve the bytes from "left to right", the bytes should
+    /// be read from "right to left" and inserted at the beginning of the buffer first!
     fn rev_read(&mut self, buf: &mut [u8]) -> Result<usize>;
 
+    /// Like [std::io::Read::read_vectored] but it uses `rev_read` instead of `read`.
     fn rev_read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> Result<usize> {
         let buf = bufs
             .iter_mut()
@@ -19,10 +24,14 @@ pub trait RevRead {
         self.rev_read(buf)
     }
 
+    /// Can be also seen as `rev_read_to_start`.
+    ///
+    /// Read all bytes until the start of the source, placing them into `buf`.
     fn rev_read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
         default_rev_read_to_end(self, buf)
     }
 
+    /// Read all bytes until the start of the source, **pre**pending them to `buf`.
     fn rev_read_to_string(&mut self, buf: &mut String) -> Result<usize> {
         let mut bytes_buf = Vec::new();
         let amount_bytes = default_rev_read_to_end(self, &mut bytes_buf)?;
@@ -222,15 +231,15 @@ pub trait RevBufRead: RevRead {
     }
 }
 
-/// An iterator over `u8` values of a reader.
+/// An iterator over `u8` values of a rev-reader.
 ///
-/// This struct is generally created by calling [`bytes`] on a reader.
-/// Please see the documentation of [`bytes`] for more details.
+/// This struct is generally created by calling [`rev_bytes`] on a reader.
+/// Please see the documentation of [`rev_bytes`] for more details.
 ///
-/// [`bytes`]: Read::bytes
+/// [`rev_bytes`]: RevRead::rev_bytes
 #[derive(Debug)]
 pub struct RevBytes<R> {
-    pub inner: R,
+    inner: R,
 }
 
 impl<R: RevRead> Iterator for RevBytes<R> {
@@ -257,12 +266,12 @@ impl<R: RevRead> Iterator for RevBytes<R> {
     }
 }
 
-/// Adapter to chain together two readers.
+/// Adapter to chain together two rev-readers.
 ///
-/// This struct is generally created by calling [`chain`] on a reader.
-/// Please see the documentation of [`chain`] for more details.
+/// This struct is generally created by calling [`rev_chain`] on a reader.
+/// Please see the documentation of [`rev_chain`] for more details.
 ///
-/// [`chain`]: Read::chain
+/// [`rev_chain`]: RevRead::rev_chain
 #[derive(Debug)]
 pub struct RevChain<T, U> {
     first: T,
@@ -271,21 +280,19 @@ pub struct RevChain<T, U> {
 }
 
 impl<T, U> RevChain<T, U> {
-    /// Consumes the `Chain`, returning the wrapped readers.
+    /// Consumes the `RevChain`, returning the wrapped rev-readers.
     ///
     /// # Examples
-    ///
-    /// ```no_run
+    /// ```
     /// use std::io;
-    /// use std::io::prelude::*;
-    /// use std::fs::File;
+    /// use rev_read::RevRead;
     ///
     /// fn main() -> io::Result<()> {
-    ///     let mut foo_file = File::open("foo.txt")?;
-    ///     let mut bar_file = File::open("bar.txt")?;
+    ///     let mut data1 = [1u8, 2u8, 3u8];
+    ///     let mut data2 = [4u8, 5u8, 6u8];
     ///
-    ///     let chain = foo_file.chain(bar_file);
-    ///     let (foo_file, bar_file) = chain.into_inner();
+    ///     let rev_chain = data1.as_slice().rev_chain(data2.as_slice());
+    ///     let (data1, data2) = rev_chain.into_inner();
     ///     Ok(())
     /// }
     /// ```
@@ -293,21 +300,20 @@ impl<T, U> RevChain<T, U> {
         (self.first, self.second)
     }
 
-    /// Gets references to the underlying readers in this `Chain`.
+    /// Gets references to the underlying readers in this `RevChain`.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use std::io;
-    /// use std::io::prelude::*;
-    /// use std::fs::File;
+    /// use rev_read::RevRead;
     ///
     /// fn main() -> io::Result<()> {
-    ///     let mut foo_file = File::open("foo.txt")?;
-    ///     let mut bar_file = File::open("bar.txt")?;
+    ///     let mut data1 = [1u8, 2u8, 3u8];
+    ///     let mut data2 = [4u8, 5u8, 6u8];
     ///
-    ///     let chain = foo_file.chain(bar_file);
-    ///     let (foo_file, bar_file) = chain.get_ref();
+    ///     let rev_chain = data1.as_slice().rev_chain(data2.as_slice());
+    ///     let (data1, data2) = rev_chain.get_ref();
     ///     Ok(())
     /// }
     /// ```
@@ -325,15 +331,14 @@ impl<T, U> RevChain<T, U> {
     ///
     /// ```no_run
     /// use std::io;
-    /// use std::io::prelude::*;
-    /// use std::fs::File;
+    /// use rev_read::RevRead;
     ///
     /// fn main() -> io::Result<()> {
-    ///     let mut foo_file = File::open("foo.txt")?;
-    ///     let mut bar_file = File::open("bar.txt")?;
+    ///     let mut data1 = [1u8, 2u8, 3u8];
+    ///     let mut data2 = [4u8, 5u8, 6u8];
     ///
-    ///     let mut chain = foo_file.chain(bar_file);
-    ///     let (foo_file, bar_file) = chain.get_mut();
+    ///     let mut rev_chain = data1.as_slice().rev_chain(data2.as_slice());
+    ///     let (data1, data2) = rev_chain.get_mut();
     ///     Ok(())
     /// }
     /// ```
