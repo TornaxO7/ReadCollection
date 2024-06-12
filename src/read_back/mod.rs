@@ -435,13 +435,14 @@ impl<T: BufReadBack, U: BufReadBack> BufReadBack for ReadBackChain<T, U> {
     }
 }
 
-/// An iterator over the contents of an instance of `RevBufRead` split on a
+/// An iterator over the contents of an instance of [`BufReadBack`] split on a
 /// particular byte.
 ///
-/// This struct is generally created by calling [`rev_split`] on a `RevBufRead`.
-/// Please see the documentation of [`rev_split`] for more details.
+/// This struct is generally created by calling [`read_back_split`] on a [`BufReadBack`].
+/// Please see the documentation of [`read_back_split`] for more details.
 ///
-/// [`rev_split`]: RevBufRead::rev_split
+/// [`BufReadBack`]: BufReadBack
+/// [`read_back_split`]: BufReadBack::read_back_split
 #[derive(Debug)]
 pub struct ReadBackSplit<B> {
     buf: B,
