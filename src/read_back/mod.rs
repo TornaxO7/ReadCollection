@@ -36,9 +36,8 @@ use crate::DEFAULT_BUF_SIZE;
 pub trait ReadBack {
     /// Pull some bytes from this source into the specified buffer, returning how many bytes were read.
     ///
-    /// The same conditions have to be met as in [std::io::Read::read] except that instead of reading
-    /// for example in a file, where you retrieve the bytes from "left to right", the bytes should
-    /// be read from "right to left" and inserted at the beginning of the buffer first!
+    /// The same conditions have to be met as in [`Read::read`].
+    /// The difference to [`Read::read`] is that `read_back` is reading "backwards".
     ///
     /// # Example
     /// ```rust
@@ -59,21 +58,60 @@ pub trait ReadBack {
     ///     assert_eq!(&small_buffer, &[2]);
     /// }
     /// ```
+    ///
+    /// [`Read::read`]: std::io::Read::read
     fn read_back(&mut self, buf: &mut [u8]) -> Result<usize>;
 
-    /// Like [std::io::Read::read_vectored] but it uses `rev_read` instead of `read`.
+    /// Like [`Read::read_vectored`] but it uses `rev_read` instead of `read`.
+    ///
+    /// [`Read::read_vectored`]: std::io::Read::read_vectored
     fn read_back_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> Result<usize> {
         default_read_back_vectored(|b| self.read_back(b), bufs)
     }
 
+    /// Read all bytes until the start of the source, placing them into `buf`.
+    ///
     /// Can be also seen as "read back until you reach the start of the source".
     ///
-    /// Read all bytes until the start of the source, placing them into `buf`.
+    /// # Example
+    /// ```no_run
+    /// use std::fs::File;
+    /// use std::io::Read;
+    /// use read_collection::ReadBack;
+    ///
+    /// fn main() {
+    ///     let mut file = File::open("some/path").unwrap();
+    ///     let mut buffer: Vec<u8> = vec![0; 100];
+    ///
+    ///     // do some arbitrary read...
+    ///     file.read(&mut buffer).unwrap();
+    ///
+    ///     // do some even *more* random read...
+    ///     // ...
+    ///
+    ///     // well, why not collecting *everything* from the start to
+    ///     // the cursor position?
+    ///     file.read_back_to_end(&mut buffer).unwrap();
+    /// }
+    /// ```
     fn read_back_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
         default_read_back_to_end(self, buf)
     }
 
-    /// Read all bytes until the start of the source, **pre**pending them to `buf`.
+    /// Read all bytes until the start of the source, **pre**pending them to `buf` (since we're reading back).
+    ///
+    /// # Example
+    /// ```
+    /// use read_collection::ReadBack;
+    ///
+    /// fn main() {
+    ///     let mut message = "Arch btw.".to_string();
+    ///     let prefix = b"I use ";
+    ///
+    ///     assert_eq!(prefix.as_slice().read_back_to_string(&mut message).ok(), Some(prefix.len()));
+    ///     assert_eq!(message, "I use Arch btw.".to_string());
+    /// }
+    /// ```
     fn read_back_to_string(&mut self, buf: &mut String) -> Result<usize> {
         default_read_back_to_string(self, buf)
     }

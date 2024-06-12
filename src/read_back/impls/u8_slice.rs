@@ -52,8 +52,13 @@ impl ReadBack for &[u8] {
     }
 
     fn read_back_to_string(&mut self, buf: &mut String) -> std::io::Result<usize> {
-        // validating the bytes from right to left or left to right doesn't differ
-        self.read_to_string(buf)
+        let mut self_string = String::from_utf8(self.to_vec())
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        self_string.push_str(&buf);
+        *buf = self_string;
+
+        Ok(self.len())
     }
 
     fn read_back_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
@@ -184,14 +189,14 @@ mod tests {
 
             #[test]
             fn general() {
-                let data = b"I use Arch btw.";
+                let data = b"I use ";
 
-                let mut buffer = "Hi! ".to_string();
+                let mut buffer = "Arch btw.".to_string();
                 assert_eq!(
                     data.as_slice().read_back_to_string(&mut buffer).ok(),
                     Some(data.len())
                 );
-                assert_eq!(&buffer, "Hi! I use Arch btw.");
+                assert_eq!(&buffer, "I use Arch btw.");
             }
         }
 
