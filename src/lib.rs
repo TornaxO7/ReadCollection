@@ -17,8 +17,7 @@
 //!     assert_eq!(buffer, [1]);
 //!     println!("With Read: buffer = [{}]", buffer[0]);
 //!
-//!     // The reversed version:
-//!     //                           [--] <- notice the `rev_` here
+//!     // The read-back version:
 //!     assert_eq!(values.as_slice().read_back(&mut buffer).ok(), Some(1));
 //!     //                 [-] and the buffer contains the value starting from the back!
 //!     assert_eq!(buffer, [3]);
