@@ -6,33 +6,48 @@ use std::{
 
 use crate::DEFAULT_BUF_SIZE;
 
-/// Equals the [std::io::Read] trait, except that everything is in reverse.
-pub trait RevRead {
+/// A similar trait as [std::io::Read] trait that can be used to read back the content which you read with
+/// [std::io::Read::read].
+pub trait ReadBack {
     /// Pull some bytes from this source into the specified buffer, returning how many bytes were read.
     /// The same conditions have to be met as in [std::io::Read::read] except that instead of reading
     /// for example in a file, where you retrieve the bytes from "left to right", the bytes should
     /// be read from "right to left" and inserted at the beginning of the buffer first!
-    fn rev_read(&mut self, buf: &mut [u8]) -> Result<usize>;
+    ///
+    /// # Example
+    /// ```rust
+    /// use rev_read::RevRead;
+    ///
+    /// fn main() {
+    ///     let data = [1u8, 2u8];
+    ///     let mut buffer: [u8; 3] = [0; 3];
+    ///
+    ///     assert_eq!(data.as_slice().rev_read(&mut buffer).ok(), Some(2));
+    ///     // notice here, that the values are added at the beginning of the array!
+    ///     assert_eq!(&buffer, &[1, 2, 0]);
+    /// }
+    /// ```
+    fn read_back(&mut self, buf: &mut [u8]) -> Result<usize>;
 
     /// Like [std::io::Read::read_vectored] but it uses `rev_read` instead of `read`.
-    fn rev_read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> Result<usize> {
+    fn read_back_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> Result<usize> {
         let buf = bufs
             .iter_mut()
             .find(|b| !b.is_empty())
             .map_or(&mut [][..], |b| &mut **b);
 
-        self.rev_read(buf)
+        self.read_back(buf)
     }
 
     /// Can be also seen as `rev_read_to_start`.
     ///
     /// Read all bytes until the start of the source, placing them into `buf`.
-    fn rev_read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
+    fn read_back_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
         default_rev_read_to_end(self, buf)
     }
 
     /// Read all bytes until the start of the source, **pre**pending them to `buf`.
-    fn rev_read_to_string(&mut self, buf: &mut String) -> Result<usize> {
+    fn read_back_to_string(&mut self, buf: &mut String) -> Result<usize> {
         let mut bytes_buf = Vec::new();
         let amount_bytes = default_rev_read_to_end(self, &mut bytes_buf)?;
 
@@ -49,9 +64,9 @@ pub trait RevRead {
         Ok(amount_bytes)
     }
 
-    fn rev_read_exact(&mut self, mut buf: &mut [u8]) -> Result<()> {
+    fn read_back_exact(&mut self, mut buf: &mut [u8]) -> Result<()> {
         while !buf.is_empty() {
-            match self.rev_read(buf) {
+            match self.read_back(buf) {
                 Ok(0) => break,
                 Ok(n) => {
                     let buf_len = buf.len();
@@ -72,43 +87,36 @@ pub trait RevRead {
         }
     }
 
-    fn rev_by_ref(&mut self) -> &mut Self
+    fn read_back_bytes(self) -> ReadBackBytes<Self>
     where
         Self: Sized,
     {
-        self
+        ReadBackBytes { inner: self }
     }
 
-    fn rev_bytes(self) -> RevBytes<Self>
+    fn read_back_chain<R: ReadBack>(self, next: R) -> ReadBackChain<Self, R>
     where
         Self: Sized,
     {
-        RevBytes { inner: self }
-    }
-
-    fn rev_chain<R: RevRead>(self, next: R) -> RevChain<Self, R>
-    where
-        Self: Sized,
-    {
-        RevChain {
+        ReadBackChain {
             first: self,
             second: next,
             done_first: false,
         }
     }
-    fn rev_take(self, limit: u64) -> RevTake<Self>
+    fn read_back_take(self, limit: u64) -> ReadBackTake<Self>
     where
         Self: Sized,
     {
-        RevTake { inner: self, limit }
+        ReadBackTake { inner: self, limit }
     }
 }
 
 /// Equals the [std::io::BufRead] trait, except that everything is in reverse.
-pub trait RevBufRead: RevRead {
-    fn rev_fill_buf(&mut self) -> io::Result<&[u8]>;
+pub trait BufReadBack: ReadBack {
+    fn read_back_fill_buf(&mut self) -> io::Result<&[u8]>;
 
-    fn rev_consume(&mut self, amt: usize);
+    fn read_back_consume(&mut self, amt: usize);
 
     /// Check if the underlying `RevRead` has any data left to be read.
     ///
@@ -118,16 +126,16 @@ pub trait RevBufRead: RevRead {
     /// Default implementation calls `rev_fill_buf` and checks that
     /// returned slice is empty (which means that there is no data left,
     /// since EOF is reached).
-    fn rev_has_data_left(&mut self) -> io::Result<bool> {
-        self.rev_fill_buf().map(|buffer| buffer.is_empty())
+    fn read_back_has_data_left(&mut self) -> io::Result<bool> {
+        self.read_back_fill_buf().map(|buffer| buffer.is_empty())
     }
 
-    fn rev_read_until(&mut self, delim: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
+    fn read_back_until(&mut self, delim: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
         let mut amount_read = 0;
 
         loop {
             let (done, used) = {
-                let new_read = match self.rev_fill_buf() {
+                let new_read = match self.read_back_fill_buf() {
                     Ok(n) => n,
                     Err(err) if err.kind() == ErrorKind::Interrupted => continue,
                     Err(err) => return Err(err),
@@ -154,7 +162,7 @@ pub trait RevBufRead: RevRead {
                 }
             };
 
-            self.rev_consume(used);
+            self.read_back_consume(used);
             amount_read += used;
             if done || used == 0 {
                 return Ok(amount_read);
@@ -162,12 +170,12 @@ pub trait RevBufRead: RevRead {
         }
     }
 
-    fn rev_skip_until(&mut self, delim: u8) -> io::Result<usize> {
+    fn read_back_skip_until(&mut self, delim: u8) -> io::Result<usize> {
         let mut amount_read: usize = 0;
 
         loop {
             let (done, used) = {
-                let new_read = match self.rev_fill_buf() {
+                let new_read = match self.read_back_fill_buf() {
                     Ok(n) => n,
                     Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
                     Err(e) => return Err(e),
@@ -179,7 +187,7 @@ pub trait RevBufRead: RevRead {
                 }
             };
 
-            self.rev_consume(used);
+            self.read_back_consume(used);
             amount_read += used;
             if done || used == 0 {
                 return Ok(amount_read);
@@ -187,12 +195,12 @@ pub trait RevBufRead: RevRead {
         }
     }
 
-    fn rev_read_line(&mut self, dest: &mut String) -> io::Result<usize> {
+    fn read_back_line(&mut self, dest: &mut String) -> io::Result<usize> {
         let mut buffer = Vec::with_capacity(crate::DEFAULT_BUF_SIZE);
 
-        let mut amount_read = self.rev_read_until(b'\n', &mut buffer)?;
+        let mut amount_read = self.read_back_until(b'\n', &mut buffer)?;
         if self
-            .rev_fill_buf()?
+            .read_back_fill_buf()?
             .last()
             .map(|&c| c == b'\r')
             .unwrap_or(false)
@@ -202,7 +210,7 @@ pub trait RevBufRead: RevRead {
             new_buf.extend_from_slice(&buffer);
             buffer = new_buf;
             amount_read += 1;
-            self.rev_consume(1);
+            self.read_back_consume(1);
         }
 
         match String::from_utf8(buffer) {
@@ -216,14 +224,14 @@ pub trait RevBufRead: RevRead {
         }
     }
 
-    fn rev_split(self, delim: u8) -> RevSplit<Self>
+    fn read_back_split(self, delim: u8) -> RevSplit<Self>
     where
         Self: Sized,
     {
         RevSplit { buf: self, delim }
     }
 
-    fn rev_lines(self) -> RevLines<Self>
+    fn read_back_lines(self) -> RevLines<Self>
     where
         Self: Sized,
     {
@@ -238,11 +246,11 @@ pub trait RevBufRead: RevRead {
 ///
 /// [`rev_bytes`]: RevRead::rev_bytes
 #[derive(Debug)]
-pub struct RevBytes<R> {
+pub struct ReadBackBytes<R> {
     inner: R,
 }
 
-impl<R: RevRead> Iterator for RevBytes<R> {
+impl<R: ReadBack> Iterator for ReadBackBytes<R> {
     type Item = Result<u8>;
 
     // Not `#[inline]`. This function gets inlined even without it, but having
@@ -250,7 +258,7 @@ impl<R: RevRead> Iterator for RevBytes<R> {
     fn next(&mut self) -> Option<Result<u8>> {
         let mut byte: u8 = 0;
         loop {
-            return match self.inner.rev_read(slice::from_mut(&mut byte)) {
+            return match self.inner.read_back(slice::from_mut(&mut byte)) {
                 Ok(0) => None,
                 Err(e) if e.kind() == ErrorKind::Other => None,
                 Ok(..) => Some(Ok(byte)),
@@ -273,13 +281,13 @@ impl<R: RevRead> Iterator for RevBytes<R> {
 ///
 /// [`rev_chain`]: RevRead::rev_chain
 #[derive(Debug)]
-pub struct RevChain<T, U> {
+pub struct ReadBackChain<T, U> {
     first: T,
     second: U,
     done_first: bool,
 }
 
-impl<T, U> RevChain<T, U> {
+impl<T, U> ReadBackChain<T, U> {
     /// Consumes the `RevChain`, returning the wrapped rev-readers.
     ///
     /// # Examples
@@ -347,61 +355,61 @@ impl<T, U> RevChain<T, U> {
     }
 }
 
-impl<T: RevRead, U: RevRead> RevRead for RevChain<T, U> {
-    fn rev_read(&mut self, buf: &mut [u8]) -> Result<usize> {
+impl<T: ReadBack, U: ReadBack> ReadBack for ReadBackChain<T, U> {
+    fn read_back(&mut self, buf: &mut [u8]) -> Result<usize> {
         if !self.done_first {
-            match self.first.rev_read(buf)? {
+            match self.first.read_back(buf)? {
                 0 if !buf.is_empty() => self.done_first = true,
                 n => return Ok(n),
             }
         }
-        self.second.rev_read(buf)
+        self.second.read_back(buf)
     }
 
-    fn rev_read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> Result<usize> {
+    fn read_back_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> Result<usize> {
         if !self.done_first {
-            match self.first.rev_read_vectored(bufs)? {
+            match self.first.read_back_vectored(bufs)? {
                 0 if bufs.iter().any(|b| !b.is_empty()) => self.done_first = true,
                 n => return Ok(n),
             }
         }
-        self.second.rev_read_vectored(bufs)
+        self.second.read_back_vectored(bufs)
     }
 
-    fn rev_read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
+    fn read_back_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
         let mut read = 0;
         if !self.done_first {
-            read += self.first.rev_read_to_end(buf)?;
+            read += self.first.read_back_to_end(buf)?;
             self.done_first = true;
         }
-        read += self.second.rev_read_to_end(buf)?;
+        read += self.second.read_back_to_end(buf)?;
         Ok(read)
     }
 }
 
-impl<T: RevBufRead, U: RevBufRead> RevBufRead for RevChain<T, U> {
-    fn rev_fill_buf(&mut self) -> Result<&[u8]> {
+impl<T: BufReadBack, U: BufReadBack> BufReadBack for ReadBackChain<T, U> {
+    fn read_back_fill_buf(&mut self) -> Result<&[u8]> {
         if !self.done_first {
-            match self.first.rev_fill_buf()? {
+            match self.first.read_back_fill_buf()? {
                 [] => self.done_first = true,
                 buf => return Ok(buf),
             }
         }
-        self.second.rev_fill_buf()
+        self.second.read_back_fill_buf()
     }
 
-    fn rev_consume(&mut self, amt: usize) {
+    fn read_back_consume(&mut self, amt: usize) {
         if !self.done_first {
-            self.first.rev_consume(amt)
+            self.first.read_back_consume(amt)
         } else {
-            self.second.rev_consume(amt)
+            self.second.read_back_consume(amt)
         }
     }
 
-    fn rev_read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> Result<usize> {
+    fn read_back_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> Result<usize> {
         let mut read = 0;
         if !self.done_first {
-            let n = self.first.rev_read_until(byte, buf)?;
+            let n = self.first.read_back_until(byte, buf)?;
             read += n;
 
             match buf.last() {
@@ -409,7 +417,7 @@ impl<T: RevBufRead, U: RevBufRead> RevBufRead for RevChain<T, U> {
                 _ => self.done_first = true,
             }
         }
-        read += self.second.rev_read_until(byte, buf)?;
+        read += self.second.read_back_until(byte, buf)?;
         Ok(read)
     }
 }
@@ -427,12 +435,12 @@ pub struct RevSplit<B> {
     delim: u8,
 }
 
-impl<B: RevBufRead> Iterator for RevSplit<B> {
+impl<B: BufReadBack> Iterator for RevSplit<B> {
     type Item = Result<Vec<u8>>;
 
     fn next(&mut self) -> Option<Result<Vec<u8>>> {
         let mut buf = Vec::new();
-        match self.buf.rev_read_until(self.delim, &mut buf) {
+        match self.buf.read_back_until(self.delim, &mut buf) {
             Ok(0) => None,
             Ok(_n) => {
                 if buf[0] == self.delim {
@@ -456,12 +464,12 @@ pub struct RevLines<B> {
     buf: B,
 }
 
-impl<B: RevBufRead> Iterator for RevLines<B> {
+impl<B: BufReadBack> Iterator for RevLines<B> {
     type Item = Result<String>;
 
     fn next(&mut self) -> Option<Result<String>> {
         let mut buf = String::new();
-        match self.buf.rev_read_line(&mut buf) {
+        match self.buf.read_back_line(&mut buf) {
             Ok(0) => None,
             Ok(_n) => {
                 if buf.starts_with('\n') {
@@ -484,12 +492,12 @@ impl<B: RevBufRead> Iterator for RevLines<B> {
 ///
 /// [`take`]: Read::take
 #[derive(Debug)]
-pub struct RevTake<T> {
+pub struct ReadBackTake<T> {
     inner: T,
     limit: u64,
 }
 
-impl<T> RevTake<T> {
+impl<T> ReadBackTake<T> {
     pub fn limit(&self) -> u64 {
         self.limit
     }
@@ -511,8 +519,8 @@ impl<T> RevTake<T> {
     }
 }
 
-impl<T: RevRead> RevRead for RevTake<T> {
-    fn rev_read(&mut self, buf: &mut [u8]) -> Result<usize> {
+impl<T: ReadBack> ReadBack for ReadBackTake<T> {
+    fn read_back(&mut self, buf: &mut [u8]) -> Result<usize> {
         // Don't call into inner reader at all at EOF because it may still block
         if self.limit == 0 {
             return Ok(0);
@@ -521,37 +529,37 @@ impl<T: RevRead> RevRead for RevTake<T> {
         let buf_len = buf.len();
 
         let max = cmp::min(buf_len as u64, self.limit) as usize;
-        let n = self.inner.rev_read(&mut buf[buf_len - max..])?;
+        let n = self.inner.read_back(&mut buf[buf_len - max..])?;
         assert!(n as u64 <= self.limit, "number of read bytes exceeds limit");
         self.limit -= n as u64;
         Ok(n)
     }
 }
 
-impl<T: RevBufRead> RevBufRead for RevTake<T> {
-    fn rev_fill_buf(&mut self) -> Result<&[u8]> {
+impl<T: BufReadBack> BufReadBack for ReadBackTake<T> {
+    fn read_back_fill_buf(&mut self) -> Result<&[u8]> {
         // Don't call into inner reader at all at EOF because it may still block
         if self.limit == 0 {
             return Ok(&[]);
         }
 
-        let buf = self.inner.rev_fill_buf()?;
+        let buf = self.inner.read_back_fill_buf()?;
         let buf_len = buf.len();
 
         let cap = cmp::min(buf_len as u64, self.limit) as usize;
         Ok(&buf[buf_len - cap..])
     }
 
-    fn rev_consume(&mut self, amt: usize) {
+    fn read_back_consume(&mut self, amt: usize) {
         // Don't let callers reset the limit by passing an overlarge value
         let amt = cmp::min(amt as u64, self.limit) as usize;
         self.limit -= amt as u64;
-        self.inner.rev_consume(amt);
+        self.inner.read_back_consume(amt);
     }
 }
 
 /// == default implementations ==
-pub fn default_rev_read_to_end<R: RevRead + ?Sized>(
+pub fn default_rev_read_to_end<R: ReadBack + ?Sized>(
     reader: &mut R,
     dest_buf: &mut Vec<u8>,
 ) -> Result<usize> {
@@ -561,7 +569,7 @@ pub fn default_rev_read_to_end<R: RevRead + ?Sized>(
     let mut amount_read: usize = 0;
 
     loop {
-        match reader.rev_read(curr_buffer.as_mut_slice()) {
+        match reader.read_back(curr_buffer.as_mut_slice()) {
             Ok(amount) => {
                 println!("{}", amount);
                 if amount == 0 {
@@ -605,7 +613,7 @@ mod tests {
                 let mut reference: &[u8] = &data;
                 let mut buffer = Vec::new();
 
-                assert_eq!(reference.rev_read_to_end(&mut buffer).ok(), Some(3));
+                assert_eq!(reference.read_back_to_end(&mut buffer).ok(), Some(3));
                 assert!(reference.is_empty());
                 assert_eq!(&buffer, &data);
             }
@@ -620,7 +628,7 @@ mod tests {
                 let mut string = String::new();
 
                 assert_eq!(
-                    data.as_slice().rev_read_to_string(&mut string).ok(),
+                    data.as_slice().read_back_to_string(&mut string).ok(),
                     Some(0)
                 );
             }
@@ -631,7 +639,7 @@ mod tests {
 
                 let mut buffer = "Hi! ".to_string();
                 assert_eq!(
-                    data.as_slice().rev_read_to_string(&mut buffer).ok(),
+                    data.as_slice().read_back_to_string(&mut buffer).ok(),
                     Some(data.len())
                 );
                 assert_eq!(&buffer, "Hi! I use Arch btw.");
@@ -648,9 +656,9 @@ mod tests {
                 fn zero_rev_take() {
                     let data: [u8; 3] = [1, 2, 3];
                     let mut buffer: [u8; 3] = [0, 0, 0];
-                    let mut take = data.as_slice().rev_take(0);
+                    let mut take = data.as_slice().read_back_take(0);
 
-                    assert_eq!(take.rev_read(&mut buffer).ok(), Some(0));
+                    assert_eq!(take.read_back(&mut buffer).ok(), Some(0));
                     assert_eq!(&buffer, &[0, 0, 0]);
                 }
 
@@ -658,9 +666,9 @@ mod tests {
                 fn middle_rev_take() {
                     let data: [u8; 3] = [1, 2, 3];
                     let mut buffer: [u8; 2] = [0, 0];
-                    let mut take = data.as_slice().rev_take(1);
+                    let mut take = data.as_slice().read_back_take(1);
 
-                    assert_eq!(take.rev_read(&mut buffer).ok(), Some(1));
+                    assert_eq!(take.read_back(&mut buffer).ok(), Some(1));
                     assert_eq!(&buffer, &[0, 3]);
                 }
 
@@ -668,9 +676,9 @@ mod tests {
                 fn fill_rev_take() {
                     let data: [u8; 3] = [1, 2, 3];
                     let mut buffer: [u8; 4] = [0; 4];
-                    let mut take = data.as_slice().rev_take(data.len() as u64);
+                    let mut take = data.as_slice().read_back_take(data.len() as u64);
 
-                    assert_eq!(take.rev_read(&mut buffer).ok(), Some(data.len()));
+                    assert_eq!(take.read_back(&mut buffer).ok(), Some(data.len()));
                     assert_eq!(&buffer, &[0, 1, 2, 3]);
                 }
             }
@@ -689,7 +697,7 @@ mod tests {
                 let mut buffer = vec![];
                 let mut reference: &[u8] = &haystack;
 
-                assert_eq!(reference.rev_read_until(0, &mut buffer).ok(), Some(3));
+                assert_eq!(reference.read_back_until(0, &mut buffer).ok(), Some(3));
                 assert!(reference.is_empty());
                 assert_eq!(&buffer, &[1, 2, 3]);
             }
@@ -700,7 +708,7 @@ mod tests {
                 let mut buffer = vec![];
                 let mut reference: &[u8] = &haystack;
 
-                assert_eq!(reference.rev_read_until(2, &mut buffer).ok(), Some(2));
+                assert_eq!(reference.read_back_until(2, &mut buffer).ok(), Some(2));
                 assert_eq!(reference, &[1]);
                 assert_eq!(&buffer, &[2, 3]);
             }
@@ -711,7 +719,7 @@ mod tests {
                 let mut buffer = vec![];
                 let mut reference: &[u8] = &haystack;
 
-                assert_eq!(reference.rev_read_until(3, &mut buffer).ok(), Some(1));
+                assert_eq!(reference.read_back_until(3, &mut buffer).ok(), Some(1));
                 assert_eq!(reference, &[1, 2]);
                 assert_eq!(&buffer, &[3]);
             }
@@ -725,7 +733,7 @@ mod tests {
                 let haystack: [u8; 3] = [1, 2, 3];
                 let mut reference: &[u8] = &haystack;
 
-                assert_eq!(reference.rev_skip_until(0).ok(), Some(3));
+                assert_eq!(reference.read_back_skip_until(0).ok(), Some(3));
                 assert!(reference.is_empty());
             }
 
@@ -734,7 +742,7 @@ mod tests {
                 let haystack: [u8; 3] = [1, 2, 3];
                 let mut reference: &[u8] = &haystack;
 
-                assert_eq!(reference.rev_skip_until(2).ok(), Some(2));
+                assert_eq!(reference.read_back_skip_until(2).ok(), Some(2));
                 assert_eq!(reference, &[1])
             }
 
@@ -743,7 +751,7 @@ mod tests {
                 let haystack: [u8; 3] = [1, 2, 3];
                 let mut reference: &[u8] = &haystack;
 
-                assert_eq!(reference.rev_skip_until(3).ok(), Some(1));
+                assert_eq!(reference.read_back_skip_until(3).ok(), Some(1));
                 assert_eq!(reference, &[1, 2]);
             }
         }
@@ -757,7 +765,7 @@ mod tests {
                 let mut buffer = String::new();
 
                 assert_eq!(
-                    data.as_slice().rev_read_line(&mut buffer).ok(),
+                    data.as_slice().read_back_line(&mut buffer).ok(),
                     Some(data.len())
                 );
                 assert_eq!(buffer.as_bytes(), data as &[u8]);
@@ -768,7 +776,7 @@ mod tests {
                 let data = b"first line\r\nsecond line";
                 let mut buffer = String::new();
 
-                assert_eq!(data.as_slice().rev_read_line(&mut buffer).ok(), Some(13));
+                assert_eq!(data.as_slice().read_back_line(&mut buffer).ok(), Some(13));
                 assert_eq!(&buffer, &"\r\nsecond line");
             }
 
@@ -777,7 +785,7 @@ mod tests {
                 let data = b"\nsus";
                 let mut buffer = String::new();
 
-                assert_eq!(data.as_slice().rev_read_line(&mut buffer).ok(), Some(4));
+                assert_eq!(data.as_slice().read_back_line(&mut buffer).ok(), Some(4));
                 assert_eq!(buffer.as_bytes(), data);
             }
         }
@@ -788,7 +796,7 @@ mod tests {
             #[test]
             fn no_delim() {
                 let data = b"hello there";
-                let mut split = data.as_slice().rev_split(b'k');
+                let mut split = data.as_slice().read_back_split(b'k');
 
                 let next = split.next();
                 assert!(next.as_ref().is_some());
@@ -808,7 +816,7 @@ mod tests {
             #[test]
             fn delim_in_between() {
                 let data = b"hello there";
-                let mut split = data.as_slice().rev_split(b' ');
+                let mut split = data.as_slice().read_back_split(b' ');
 
                 let first = split.next();
                 assert!(first.as_ref().is_some());
@@ -843,7 +851,7 @@ mod tests {
             #[test]
             fn no_new_lines() {
                 let data = b"hello\rthere";
-                let mut lines = data.as_slice().rev_lines();
+                let mut lines = data.as_slice().read_back_lines();
 
                 let next = lines.next();
                 assert!(next.as_ref().is_some());
@@ -859,7 +867,7 @@ mod tests {
             #[test]
             fn one_new_line_char() {
                 let data = b"Hello there!\r\nGeneral kenobi!";
-                let mut lines = data.as_slice().rev_lines();
+                let mut lines = data.as_slice().read_back_lines();
 
                 let next = lines.next();
                 assert!(next.as_ref().is_some());
@@ -885,18 +893,18 @@ mod tests {
                 fn middle_rev_fill_buf() {
                     let data: [u8; 3] = [1, 2, 3];
 
-                    let mut take = data.as_slice().rev_take(2);
+                    let mut take = data.as_slice().read_back_take(2);
 
-                    let buf = take.rev_fill_buf();
+                    let buf = take.read_back_fill_buf();
                     assert_eq!(buf.ok(), Some([2, 3].as_slice()));
                 }
 
                 #[test]
                 fn exceeding_take_value() {
                     let data: [u8; 3] = [1, 2, 3];
-                    let mut take = data.as_slice().rev_take((data.len() + 10) as u64);
+                    let mut take = data.as_slice().read_back_take((data.len() + 10) as u64);
 
-                    let buf = take.rev_fill_buf();
+                    let buf = take.read_back_fill_buf();
                     assert_eq!(buf.ok(), Some(data.as_slice()));
                 }
             }
@@ -907,10 +915,10 @@ mod tests {
                 #[test]
                 fn exceeding_consume() {
                     let data: [u8; 3] = [1, 2, 3];
-                    let mut take = data.as_slice().rev_take(data.len() as u64);
-                    take.rev_consume(1);
+                    let mut take = data.as_slice().read_back_take(data.len() as u64);
+                    take.read_back_consume(1);
 
-                    assert_eq!(take.rev_fill_buf().ok(), Some([1, 2].as_slice()));
+                    assert_eq!(take.read_back_fill_buf().ok(), Some([1, 2].as_slice()));
                 }
             }
         }
@@ -925,9 +933,9 @@ mod tests {
 
                 let mut buffer: Vec<u8> = Vec::new();
 
-                let mut rev_chain = data1.as_slice().rev_chain(data2.as_slice());
+                let mut rev_chain = data1.as_slice().read_back_chain(data2.as_slice());
 
-                assert_eq!(rev_chain.rev_read(&mut buffer).ok(), Some(0));
+                assert_eq!(rev_chain.read_back(&mut buffer).ok(), Some(0));
                 assert!(buffer.is_empty());
             }
 
@@ -938,9 +946,9 @@ mod tests {
 
                 let mut buffer: [u8; 4] = [0; 4];
 
-                let mut rev_chain = data1.as_slice().rev_chain(data2.as_slice());
+                let mut rev_chain = data1.as_slice().read_back_chain(data2.as_slice());
 
-                assert_eq!(rev_chain.rev_read(&mut buffer).ok(), Some(3));
+                assert_eq!(rev_chain.read_back(&mut buffer).ok(), Some(3));
                 assert_eq!(&buffer, &[0, 1, 2, 3]);
             }
         }
@@ -952,7 +960,7 @@ mod tests {
             fn empty_data() {
                 let data: [u8; 0] = [];
 
-                let mut rev_bytes = data.as_slice().rev_bytes();
+                let mut rev_bytes = data.as_slice().read_back_bytes();
                 assert!(rev_bytes.next().is_none());
             }
 
@@ -960,7 +968,7 @@ mod tests {
             fn general() {
                 let data: [u8; 3] = [1, 2, 3];
 
-                let mut rev_bytes = data.as_slice().rev_bytes();
+                let mut rev_bytes = data.as_slice().read_back_bytes();
                 for byte_value in 3..=1 {
                     let next_value = rev_bytes.next();
 

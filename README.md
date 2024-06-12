@@ -21,7 +21,6 @@ fn main() {
     //                 [-] and the buffer contains the value starting from the back!
     assert_eq!(buffer, [3]);
 }
-
 ```
 
 [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html

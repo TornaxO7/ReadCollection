@@ -3,10 +3,10 @@ use std::{
     io::{Read, Seek, SeekFrom},
 };
 
-use crate::RevRead;
+use crate::ReadBack;
 
-impl RevRead for &File {
-    fn rev_read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+impl ReadBack for &File {
+    fn read_back(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let curr_pos = self.stream_position()?;
 
         let buf_len = buf.len() as u64;
@@ -25,8 +25,8 @@ impl RevRead for &File {
     }
 }
 
-impl RevRead for File {
-    fn rev_read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        (&*self).rev_read(buf)
+impl ReadBack for File {
+    fn read_back(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        (&*self).read_back(buf)
     }
 }

@@ -1,4 +1,4 @@
-use rev_read::RevRead;
+use rev_read::ReadBack;
 use std::io::Read;
 
 fn main() {
@@ -12,7 +12,7 @@ fn main() {
 
     // The reversed version:
     //                           [--] <- notice the `rev_` here
-    assert_eq!(values.as_slice().rev_read(&mut buffer).ok(), Some(1));
+    assert_eq!(values.as_slice().read_back(&mut buffer).ok(), Some(1));
     //                 [-] and the buffer contains the value starting from the back!
     assert_eq!(buffer, [3]);
     println!("With RevRead: buffer = [{}]", buffer[0]);

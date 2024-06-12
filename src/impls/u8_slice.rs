@@ -1,14 +1,14 @@
 use std::io::IoSliceMut;
 use std::{cmp, io::Read};
 
-use crate::RevBufRead;
-use crate::RevRead;
+use crate::BufReadBack;
+use crate::ReadBack;
 
 /// As for the [`Read`] implementation of `&[u8]`, bytes get copied from the slice.
 ///
 /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html#impl-Read-for-%26%5Bu8%5D
-impl RevRead for &[u8] {
-    fn rev_read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+impl ReadBack for &[u8] {
+    fn read_back(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let buf_len = buf.len();
         let self_len = self.len();
 
@@ -37,10 +37,10 @@ impl RevRead for &[u8] {
         Ok(amount)
     }
 
-    fn rev_read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
+    fn read_back_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
         let mut amount_read = 0;
         for buf in bufs {
-            amount_read += self.rev_read(buf)?;
+            amount_read += self.read_back(buf)?;
             if self.is_empty() {
                 break;
             }
@@ -49,7 +49,7 @@ impl RevRead for &[u8] {
         Ok(amount_read)
     }
 
-    fn rev_read_to_end(&mut self, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+    fn read_back_to_end(&mut self, buf: &mut Vec<u8>) -> std::io::Result<usize> {
         let len = self.len();
         buf.try_reserve(len)
             .map_err(|_| std::io::ErrorKind::OutOfMemory)?;
@@ -63,12 +63,12 @@ impl RevRead for &[u8] {
         Ok(len)
     }
 
-    fn rev_read_to_string(&mut self, buf: &mut String) -> std::io::Result<usize> {
+    fn read_back_to_string(&mut self, buf: &mut String) -> std::io::Result<usize> {
         // validating the bytes from right to left or left to right doesn't differ
         self.read_to_string(buf)
     }
 
-    fn rev_read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
+    fn read_back_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
         if buf.len() > self.len() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
@@ -92,12 +92,12 @@ impl RevRead for &[u8] {
     }
 }
 
-impl RevBufRead for &[u8] {
-    fn rev_fill_buf(&mut self) -> std::io::Result<&[u8]> {
+impl BufReadBack for &[u8] {
+    fn read_back_fill_buf(&mut self) -> std::io::Result<&[u8]> {
         Ok(*self)
     }
 
-    fn rev_consume(&mut self, amt: usize) {
+    fn read_back_consume(&mut self, amt: usize) {
         let end = self.len().saturating_sub(amt);
         *self = &self[..end];
     }
@@ -105,17 +105,17 @@ impl RevBufRead for &[u8] {
 
 #[cfg(test)]
 mod tests {
-    use super::RevRead;
+    use super::ReadBack;
 
     mod rev_read {
-        use super::RevRead;
+        use super::ReadBack;
 
         #[test]
         fn amount_1() {
             let values = [1, 2, 3];
             let mut buffer = [0];
 
-            assert_eq!(values.as_slice().rev_read(&mut buffer).ok(), Some(1));
+            assert_eq!(values.as_slice().read_back(&mut buffer).ok(), Some(1));
             assert_eq!(buffer, [3]);
         }
 
@@ -124,7 +124,7 @@ mod tests {
             let values = [1, 2, 3];
             let mut buffer = [0, 0];
 
-            assert_eq!(values.as_slice().rev_read(&mut buffer).ok(), Some(2));
+            assert_eq!(values.as_slice().read_back(&mut buffer).ok(), Some(2));
             assert_eq!(buffer, [2, 3]);
         }
 
@@ -133,19 +133,19 @@ mod tests {
             let values = [1, 2, 3];
             let mut buffer = [0, 0, 0, 0];
 
-            assert_eq!(values.as_slice().rev_read(&mut buffer).ok(), Some(3));
-            assert_eq!(buffer, [0, 1, 2, 3]);
+            assert_eq!(values.as_slice().read_back(&mut buffer).ok(), Some(3));
+            assert_eq!(buffer, [1, 2, 3, 0]);
         }
     }
 
     mod rev_read_exact {
-        use super::RevRead;
+        use super::ReadBack;
         #[test]
         fn empty_buf() {
             let values = [1, 2, 3];
             let mut buffer = [];
 
-            assert!(values.as_slice().rev_read_exact(&mut buffer).is_ok());
+            assert!(values.as_slice().read_back_exact(&mut buffer).is_ok());
         }
 
         #[test]
@@ -153,7 +153,7 @@ mod tests {
             let values = [1, 2, 3];
             let mut buffer = [0, 0];
 
-            assert!(values.as_slice().rev_read_exact(&mut buffer).is_ok());
+            assert!(values.as_slice().read_back_exact(&mut buffer).is_ok());
             assert_eq!(buffer, [2, 3]);
         }
 
@@ -162,19 +162,22 @@ mod tests {
             let values = [1, 2, 3];
             let mut buffer = [0, 0, 0];
 
-            assert!(values.as_slice().rev_read_exact(&mut buffer).is_ok());
+            assert!(values.as_slice().read_back_exact(&mut buffer).is_ok());
             assert_eq!(buffer, [1, 2, 3]);
         }
     }
 
     mod rev_read_to_end {
-        use super::RevRead;
+        use super::ReadBack;
         #[test]
         fn empty_vec() {
             let values = [1, 2, 3];
             let mut buffer = vec![];
 
-            assert_eq!(values.as_slice().rev_read_to_end(&mut buffer).ok(), Some(3));
+            assert_eq!(
+                values.as_slice().read_back_to_end(&mut buffer).ok(),
+                Some(3)
+            );
             assert_eq!(buffer.as_slice(), &[1, 2, 3]);
         }
 
@@ -183,20 +186,23 @@ mod tests {
             let values = [1, 2, 3];
             let mut buffer = vec![4];
 
-            assert_eq!(values.as_slice().rev_read_to_end(&mut buffer).ok(), Some(3));
+            assert_eq!(
+                values.as_slice().read_back_to_end(&mut buffer).ok(),
+                Some(3)
+            );
             assert_eq!(buffer.as_slice(), &[1, 2, 3, 4]);
         }
     }
 
     mod rev_buf_read {
-        use crate::RevBufRead;
+        use crate::BufReadBack;
 
         #[test]
         fn rev_consume_large_amt() {
             let values: [u8; 3] = [1, 2, 3];
             let mut reference: &[u8] = &values;
 
-            reference.rev_consume(values.len() + 1);
+            reference.read_back_consume(values.len() + 1);
             assert!(reference.is_empty());
         }
     }
