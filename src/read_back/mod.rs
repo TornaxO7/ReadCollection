@@ -63,12 +63,7 @@ pub trait ReadBack {
 
     /// Like [std::io::Read::read_vectored] but it uses `rev_read` instead of `read`.
     fn read_back_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> Result<usize> {
-        let buf = bufs
-            .iter_mut()
-            .find(|b| !b.is_empty())
-            .map_or(&mut [][..], |b| &mut **b);
-
-        self.read_back(buf)
+        default_read_back_vectored(|b| self.read_back(b), bufs)
     }
 
     /// Can be also seen as "read back until you reach the start of the source".
@@ -80,43 +75,11 @@ pub trait ReadBack {
 
     /// Read all bytes until the start of the source, **pre**pending them to `buf`.
     fn read_back_to_string(&mut self, buf: &mut String) -> Result<usize> {
-        let mut bytes_buf = Vec::new();
-        let amount_bytes = default_read_back_to_end(self, &mut bytes_buf)?;
-
-        let mut read_back_string = String::from_utf8(bytes_buf).map_err(|e| {
-            std::io::Error::new(
-                ErrorKind::InvalidData,
-                format!("Couldn't convert the rev-reader to a string: {}", e),
-            )
-        })?;
-
-        read_back_string.push_str(buf);
-        *buf = read_back_string;
-
-        Ok(amount_bytes)
+        default_read_back_to_string(self, buf)
     }
 
-    fn read_back_exact(&mut self, mut buf: &mut [u8]) -> Result<()> {
-        while !buf.is_empty() {
-            match self.read_back(buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    let buf_len = buf.len();
-                    buf = &mut buf[..buf_len - n];
-                }
-                Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
-                Err(e) => return Err(e),
-            }
-        }
-
-        if !buf.is_empty() {
-            Err(std::io::Error::new(
-                ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            ))
-        } else {
-            Ok(())
-        }
+    fn read_back_exact(&mut self, buf: &mut [u8]) -> Result<()> {
+        default_read_back_exact(self, buf)
     }
 
     fn read_back_bytes(self) -> ReadBackBytes<Self>
@@ -603,6 +566,18 @@ impl<T: BufReadBack> BufReadBack for ReadBackTake<T> {
 }
 
 /// == default implementations ==
+pub fn default_read_back_vectored<F: FnOnce(&mut [u8]) -> Result<usize>>(
+    read_back: F,
+    bufs: &mut [IoSliceMut<'_>],
+) -> Result<usize> {
+    let buf = bufs
+        .iter_mut()
+        .find(|b| !b.is_empty())
+        .map_or(&mut [][..], |b| &mut **b);
+
+    read_back(buf)
+}
+
 pub fn default_read_back_to_end<R: ReadBack + ?Sized>(
     reader: &mut R,
     dest_buf: &mut Vec<u8>,
@@ -638,5 +613,45 @@ pub fn default_read_back_to_end<R: ReadBack + ?Sized>(
             Err(e) if e.kind() == ErrorKind::Interrupted => continue,
             Err(e) => return Err(e),
         }
+    }
+}
+
+fn default_read_back_to_string<R: ReadBack + ?Sized>(r: &mut R, buf: &mut String) -> Result<usize> {
+    let mut bytes_buf = Vec::new();
+    let amount_bytes = default_read_back_to_end(r, &mut bytes_buf)?;
+
+    let mut read_back_string = String::from_utf8(bytes_buf).map_err(|e| {
+        std::io::Error::new(
+            ErrorKind::InvalidData,
+            format!("Couldn't convert the rev-reader to a string: {}", e),
+        )
+    })?;
+
+    read_back_string.push_str(buf);
+    *buf = read_back_string;
+
+    Ok(amount_bytes)
+}
+
+fn default_read_back_exact<R: ReadBack + ?Sized>(r: &mut R, mut buf: &mut [u8]) -> Result<()> {
+    while !buf.is_empty() {
+        match r.read_back(buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                let buf_len = buf.len();
+                buf = &mut buf[..buf_len - n];
+            }
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+
+    if !buf.is_empty() {
+        Err(std::io::Error::new(
+            ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+    } else {
+        Ok(())
     }
 }
