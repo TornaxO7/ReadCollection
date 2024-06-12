@@ -10,10 +10,10 @@ fn main() {
     assert_eq!(buffer, [1]);
     println!("With Read: buffer = [{}]", buffer[0]);
 
-    // The reversed version:
+    // The readback version:
     //                           [--] <- notice the `rev_` here
     assert_eq!(values.as_slice().read_back(&mut buffer).ok(), Some(1));
     //                 [-] and the buffer contains the value starting from the back!
     assert_eq!(buffer, [3]);
-    println!("With RevRead: buffer = [{}]", buffer[0]);
+    println!("With ReadBack: buffer = [{}]", buffer[0]);
 }
