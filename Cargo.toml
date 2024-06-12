@@ -1,9 +1,9 @@
 [package]
-name = "rev_read"
+name = "read_collection"
 version = "0.1.0"
 edition = "2021"
 authors = ["TornaxO7 <tornax@pm.me>"]
-description = "The counterpart to the `std::io::Read` trait."
+description = "A collection of different variants of the `std::io::Read` trait."
 homepage = "https://github.com/TornaxO7/BufReaderPlus"
 repository = "https://github.com/TornaxO7/BufReaderPlus"
 categories = ["caching"]

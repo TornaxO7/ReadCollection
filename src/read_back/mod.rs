@@ -224,11 +224,11 @@ pub trait BufReadBack: ReadBack {
         }
     }
 
-    fn read_back_split(self, delim: u8) -> RevSplit<Self>
+    fn read_back_split(self, delim: u8) -> ReadBackSplit<Self>
     where
         Self: Sized,
     {
-        RevSplit { buf: self, delim }
+        ReadBackSplit { buf: self, delim }
     }
 
     fn read_back_lines(self) -> RevLines<Self>
@@ -430,12 +430,12 @@ impl<T: BufReadBack, U: BufReadBack> BufReadBack for ReadBackChain<T, U> {
 ///
 /// [`rev_split`]: RevBufRead::rev_split
 #[derive(Debug)]
-pub struct RevSplit<B> {
+pub struct ReadBackSplit<B> {
     buf: B,
     delim: u8,
 }
 
-impl<B: BufReadBack> Iterator for RevSplit<B> {
+impl<B: BufReadBack> Iterator for ReadBackSplit<B> {
     type Item = Result<Vec<u8>>;
 
     fn next(&mut self) -> Option<Result<Vec<u8>>> {

@@ -1,5 +1,4 @@
-mod impls;
-mod rev_read;
+mod read_back;
 
 // Bare metal platforms usually have very small amounts of RAM
 // (in the order of hundreds of KB)
@@ -9,4 +8,4 @@ const DEFAULT_BUF_SIZE: usize = if cfg!(target_os = "espidf") {
     8 * 1024
 };
 
-pub use rev_read::{BufReadBack, ReadBack, ReadBackBytes, ReadBackChain, RevSplit};
+pub use read_back::{BufReadBack, ReadBack, ReadBackBytes, ReadBackChain, ReadBackSplit};

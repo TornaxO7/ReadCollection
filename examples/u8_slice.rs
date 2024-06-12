@@ -1,4 +1,4 @@
-use rev_read::ReadBack;
+use read_extended::ReadBack;
 use std::io::Read;
 
 fn main() {
