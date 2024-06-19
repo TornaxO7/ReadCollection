@@ -29,7 +29,7 @@ Implemented:
     - [x] for [`File`] (and `&File`)
     - [x] for [`Empty`]
   - [ ] `BufReadBack` trait
-    - [ ] for `&[u8]`
+    - [x] for `&[u8]`
     - [x] for [`Empty`]
     - [ ] `BufReadBacker` struct
  - [ ] `RevRead` for reading reversed
