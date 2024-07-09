@@ -7,16 +7,15 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1718728581,
+        "lastModified": 1718736670,
         "narHash": "sha256-oGxL4WTlA3tRq9W6VFQ6JvLXbhYj4ST6cpLrdfjZois=",
-        "owner": "TornaxO7",
+        "owner": "ModProg",
         "repo": "cargo-watchdoc",
-        "rev": "bc4bb4bb7d00fad317ef89bc9b251c44490f483b",
+        "rev": "888b976ebbb1635dbb1463c9f39be26c0ae3178c",
         "type": "github"
       },
       "original": {
-        "owner": "TornaxO7",
-        "ref": "nix-flake",
+        "owner": "ModProg",
         "repo": "cargo-watchdoc",
         "type": "github"
       }

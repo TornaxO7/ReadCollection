@@ -3,7 +3,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    cargo-watchdoc.url = "github:TornaxO7/cargo-watchdoc/nix-flake";
+    cargo-watchdoc.url = "github:ModProg/cargo-watchdoc";
   };
 
   outputs = inputs@{ flake-parts, ... }:
