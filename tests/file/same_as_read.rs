@@ -1,21 +1,10 @@
-use std::{
-    fs::File,
-    io::{Read, Seek},
-};
+use std::io::{Read, Seek};
 
 use read_collection::ReadBack;
 
-fn get_file1() -> File {
-    File::open("./tests/file/test_file1.txt").unwrap()
-}
-
-fn get_file2() -> File {
-    File::open("./tests/file/test_file2.txt").unwrap()
-}
-
 #[test]
 fn read_vs_rev_read() {
-    let mut file = get_file1();
+    let mut file = super::get_file1();
 
     let mut read_buffer = [0u8; 5];
     let mut rev_read_buffer = read_buffer;
@@ -28,7 +17,7 @@ fn read_vs_rev_read() {
 
 #[test]
 fn read_to_end_vs_rev_read_to_end() {
-    let mut file = get_file1();
+    let mut file = super::get_file1();
 
     let mut read_buffer = Vec::new();
     let mut rev_read_buffer = Vec::new();
@@ -48,7 +37,7 @@ fn read_to_end_vs_rev_read_to_end() {
 
 #[test]
 fn read_to_string_vs_rev_read_to_string() {
-    let mut file = get_file1();
+    let mut file = super::get_file1();
 
     let mut read_buffer = String::new();
     let mut rev_read_buffer = String::new();
@@ -62,7 +51,7 @@ fn read_to_string_vs_rev_read_to_string() {
 
 #[test]
 fn read_exact_vs_rev_read_exact() {
-    let mut file = get_file1();
+    let mut file = super::get_file1();
 
     let mut read_buffer: [u8; 10] = [0; 10];
     let mut rev_read_buffer: [u8; 10] = [0; 10];
@@ -75,8 +64,8 @@ fn read_exact_vs_rev_read_exact() {
 
 #[test]
 fn read_bytes_vs_rev_read_bytes() {
-    let file = get_file1();
-    let mut file2 = get_file1();
+    let file = super::get_file1();
+    let mut file2 = super::get_file1();
     file2.seek(std::io::SeekFrom::End(0)).unwrap();
 
     let read_buffer = file.bytes().map(|b| b.unwrap()).collect::<Vec<u8>>();
@@ -92,11 +81,11 @@ fn read_bytes_vs_rev_read_bytes() {
 
 #[test]
 fn read_chain_vs_rev_read_chain() {
-    let read_file1 = get_file1();
-    let read_file2 = get_file2();
+    let read_file1 = super::get_file1();
+    let read_file2 = super::get_file2();
 
-    let mut rev_read_file1 = get_file1();
-    let mut rev_read_file2 = get_file2();
+    let mut rev_read_file1 = super::get_file1();
+    let mut rev_read_file2 = super::get_file2();
 
     rev_read_file1.seek(std::io::SeekFrom::End(0)).unwrap();
     rev_read_file2.seek(std::io::SeekFrom::End(0)).unwrap();
