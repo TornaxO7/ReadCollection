@@ -23,15 +23,15 @@ fn main() {
 
 # Status
 Implemented:
-- [ ] `ReadBack` for reading back *duh*
+- [x] `ReadBack` for reading back *duh*
   - [x] `ReadBack` trait
     - [x] for `&[u8]`
     - [x] for [`File`] (and `&File`)
     - [x] for [`Empty`]
-  - [ ] `BufReadBack` trait
+  - [x] `BufReadBack` trait
     - [x] for `&[u8]`
     - [x] for [`Empty`]
-    - [ ] `BufReadBacker` struct
+    - [x] `BufReadBacker` struct
  - [ ] `RevRead` for reading reversed
    - [ ] `RevRead` trait
      - [ ] for `&[u8]`
