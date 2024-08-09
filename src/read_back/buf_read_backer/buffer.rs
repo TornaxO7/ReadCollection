@@ -2,6 +2,7 @@ use std::mem::MaybeUninit;
 
 use crate::ReadBack;
 
+/// Heavily inspired by the `std` implementation.
 #[derive(Debug)]
 pub struct Buffer {
     buf: Box<[MaybeUninit<u8>]>,

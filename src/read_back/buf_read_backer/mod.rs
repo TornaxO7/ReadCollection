@@ -1,9 +1,38 @@
 mod buffer;
 
+use std::io::BufReader;
+
 use crate::{BufReadBack, ReadBack, DEFAULT_BUF_SIZE};
 
 use self::buffer::Buffer;
 
+/// The `BufReadBacker<R>` struct adds buffering to any [`ReadBack`]er.
+///
+/// It's basically the same as `BufReader` just for reading back instead of forward.
+///
+/// # Examples
+/// ```no_run
+/// use std::io::{BufReader, Read};
+/// use std::fs::File;
+/// use read_collection::{BufReadBacker, ReadBack};
+///
+/// fn main() -> std::io::Result<()> {
+///     let file = File::open("some/path")?;
+///     let mut reader = BufReader::new(file);
+///
+///     let mut buffer = Vec::new();
+///     reader.read(&mut buffer).unwrap();
+///
+///
+///     // let's read the stuff back in
+///     let mut buffer2 = Vec::new();
+///     let mut reader = BufReadBacker::from(reader);
+///     reader.read_back(&mut buffer2)?;
+///
+///     assert_eq!(buffer, buffer2);
+///     Ok(())
+/// }
+/// ```
 #[derive(Debug)]
 pub struct BufReadBacker<R> {
     inner: R,
@@ -70,6 +99,12 @@ impl<R: ReadBack> BufReadBack for BufReadBacker<R> {
 
     fn read_back_consume(&mut self, amt: usize) {
         self.buf.consume(amt)
+    }
+}
+
+impl<R: ReadBack> From<BufReader<R>> for BufReadBacker<R> {
+    fn from(value: BufReader<R>) -> Self {
+        Self::new(value.into_inner())
     }
 }
 
