@@ -1,6 +1,8 @@
 mod buf_read_backer;
 mod impls;
 
+pub use buf_read_backer::BufReadBacker;
+
 use std::{
     cmp,
     io::{self, ErrorKind, IoSliceMut, Result},
