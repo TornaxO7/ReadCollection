@@ -2,7 +2,7 @@
 //! At the moment, there's only [ReadBack]. Feel free to suggest other possible
 //! [std::io::Read] variants which could be added to this collection.
 //!
-//! You'll likely want to use one of the following traits):
+//! You'll likely want to use one of the following traits:
 //! - [ReadBack]
 //!
 //! # Example with [ReadBack]
