@@ -1,5 +1,6 @@
 # Read Collection
-This crate provides some other variants of the [`Read`] trait, like `ReadBack` or `RevRead`.
+This crate provides some other variants of the [`Read`] trait. Currently only [`ReadBack`].
+Feel free to post other recommondations!
 
 # Example (`ReadBack`)
 ```rust
@@ -32,15 +33,6 @@ Implemented:
     - [x] for `&[u8]`
     - [x] for [`Empty`]
     - [x] `BufReadBacker` struct
- - [ ] `RevRead` for reading reversed
-   - [ ] `RevRead` trait
-     - [ ] for `&[u8]`
-     - [ ] for [`File`] (and `&File`)
-     - [ ] for [`Empty`]
-   - [ ] `BufRevRead` trait
-     - [ ] for `&[u8]`
-     - [ ] for [`Empty`]
-     - [ ] `BufRevReader` struct
 
 [`File`]: https://doc.rust-lang.org/std/fs/struct.File.html
 [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
