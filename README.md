@@ -1,5 +1,5 @@
 # Read Collection
-This crate provides some other variants of the [`Read`] trait. Currently there's only [`ReadBack`].
+This crate provides some other variants of the [`Read`] trait. Currently there's only `ReadBack`.
 Feel free to create PRs for other variants.
 
 # Example (`ReadBack`)
