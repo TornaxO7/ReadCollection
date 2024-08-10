@@ -1,6 +1,6 @@
 # Read Collection
 This crate provides some other variants of the [`Read`] trait. Currently there's only [`ReadBack`].
-Feel free to suggest other variants in the issues tab.
+Feel free to create PRs for other variants.
 
 # Example (`ReadBack`)
 ```rust
