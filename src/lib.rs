@@ -42,5 +42,5 @@ const DEFAULT_BUF_SIZE: usize = if cfg!(target_os = "espidf") {
 };
 
 pub use read_back::{
-    BufReadBack, BufReadBacker, ReadBack, ReadBackBytes, ReadBackChain, ReadBackSplit,
+    BufReadBack, BufReadBacker, ReadBack, ReadBackBytes, ReadBackChain, ReadBackSplit, ReadBackTake,
 };

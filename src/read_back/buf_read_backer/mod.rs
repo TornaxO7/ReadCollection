@@ -40,36 +40,152 @@ pub struct BufReadBacker<R> {
 }
 
 impl<R> BufReadBacker<R> {
-    pub fn get_ref(&self) -> &R {
-        &self.inner
-    }
-
-    pub fn get_mut(&mut self) -> &mut R {
-        &mut self.inner
-    }
-
+    /// Returns a reference to the internally buffered data.
+    ///
+    /// Unlike [read_back_fill_buf], this will not attempt to fill the buffer if it is empty.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use read_collection::{BufReadBacker, BufReadBack};
+    /// use std::fs::File;
+    ///
+    /// fn main() -> std::io::Result<()> {
+    ///     let f = File::open("log.txt")?;
+    ///     let mut reader = BufReadBacker::new(f);
+    ///     assert!(reader.buffer().is_empty());
+    ///
+    ///     if reader.read_back_fill_buf()?.len() > 0 {
+    ///         assert!(!reader.buffer().is_empty());
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// [read_back_fill_buf]: BufReadBack::read_back_fill_buf
     pub fn buffer(&self) -> &[u8] {
         self.buf.buffer()
     }
 
+    /// Gets a reference to the underlying reader.
+    ///
+    /// It is inadvisable to directly read from the underlying reader.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use read_collection::BufReadBacker;
+    /// use std::fs::File;
+    ///
+    /// fn main() -> std::io::Result<()> {
+    ///     let f1 = File::open("log.txt")?;
+    ///     let reader = BufReadBacker::new(f1);
+    ///
+    ///     let f2 = reader.get_ref();
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn get_ref(&self) -> &R {
+        &self.inner
+    }
+
+    /// Gets a mutable reference to the underlying reader.
+    ///
+    /// It is inadvisable to directly read from the underlying reader.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use read_collection::BufReadBacker;
+    /// use std::fs::File;
+    ///
+    /// fn main() -> std::io::Result<()> {
+    ///     let f1 = File::open("log.txt")?;
+    ///     let mut reader = BufReadBacker::new(f1);
+    ///
+    ///     let f2 = reader.get_mut();
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.inner
+    }
+
+    /// Returns the number of bytes the internal buffer can hold at once.
+    ///
+    /// # Example
+    /// ```
+    /// use read_collection::BufReadBacker;
+    ///
+    /// fn main() {
+    ///     let data: [u8; 5] = [1, 2, 3, 4, 5];
+    ///     let reader = BufReadBacker::with_capacity(42, data.as_slice());
+    ///
+    ///     assert_eq!(reader.capacity(), 42);
+    /// }
+    /// ````
     pub fn capacity(&self) -> usize {
         self.buf.capacity()
     }
 
+    /// Unwraps this `BufReadBacker<R>`, returning the underlying reader.
+    ///
+    /// Note that any leftover data in the internal buffer is lost. Therefore, a following read from the underlying reader may lead to data loss.
+    ///
+    /// # Example
+    /// ```
+    /// use read_collection::{BufReadBacker, ReadBack};
+    ///
+    /// fn main() {
+    ///     let data: [u8; 5] = [1, 2, 3, 4, 5];
+    ///     let mut buffer: [u8; 5] = [0; 5];
+    ///
+    ///     let mut reader = BufReadBacker::new(data.as_slice());
+    ///     assert_eq!(reader.read_back(&mut buffer).ok(), Some(5));
+    ///
+    ///     let mut inner = reader.into_inner();
+    ///     // note how the inner reference is "empty" now.
+    ///     assert_eq!(inner.read_back(&mut buffer).ok(), Some(0));
+    /// }
+    /// ```
     pub fn into_inner(self) -> R {
         self.inner
     }
 
-    pub fn discard_buffer(&mut self) {
+    pub(crate) fn discard_buffer(&mut self) {
         self.buf.discard_buffer();
     }
 }
 
 impl<R: ReadBack> BufReadBacker<R> {
+    /// Creates a new `BufReadBacker<R>` with a default buffer capacity. The default is currently 8 KiB (or 512 B for bare metal platforms), but may change
+    /// in the future.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use read_collection::BufReadBacker;
+    /// use std::fs::File;
+    ///
+    /// fn main() -> std::io::Result<()> {
+    ///     let file = File::open("amogus.txt")?;
+    ///     let reader = BufReadBacker::new(file);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn new(inner: R) -> Self {
         Self::with_capacity(DEFAULT_BUF_SIZE, inner)
     }
 
+    /// Creates a new `BufReadBacker<R>` with the specified buffer capacity.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use read_collection::BufReadBacker;
+    /// use std::fs::File;
+    ///
+    /// fn main() -> std::io::Result<()> {
+    ///     let nice = File::open("amogus.txt")?;
+    ///     let reader = BufReadBacker::with_capacity(69, nice);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn with_capacity(capacity: usize, inner: R) -> Self {
         Self {
             inner,

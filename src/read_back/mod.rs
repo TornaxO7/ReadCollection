@@ -65,7 +65,7 @@ pub trait ReadBack {
     /// [`Read::read`]: std::io::Read::read
     fn read_back(&mut self, buf: &mut [u8]) -> Result<usize>;
 
-    /// Like [`Read::read_vectored`] but it uses `rev_read` instead of `read`.
+    /// Like [`Read::read_vectored`] but it uses `read_back` instead of `read`.
     ///
     /// [`Read::read_vectored`]: std::io::Read::read_vectored
     fn read_back_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> Result<usize> {
@@ -353,11 +353,11 @@ pub trait BufReadBack: ReadBack {
     /// [`BufRead::lines`]: std::io::BufRead::lines
     /// [`ReadBack`]: ReadBack
     /// [`Read`]: std::io::Read
-    fn read_back_lines(self) -> RevLines<Self>
+    fn read_back_lines(self) -> ReadBackLines<Self>
     where
         Self: Sized,
     {
-        RevLines { buf: self }
+        ReadBackLines { buf: self }
     }
 }
 
@@ -587,18 +587,18 @@ impl<B: BufReadBack> Iterator for ReadBackSplit<B> {
     }
 }
 
-/// An iterator over the lines of an instance of `RevBufRead`.
+/// An iterator over the lines of an instance of `BufReadBacker`.
 ///
-/// This struct is generally created by calling [`rev_lines`] on a `RevBufRead`.
-/// Please see the documentation of [`rev_lines`] for more details.
+/// This struct is generally created by calling [`read_back_lines`] on a `BufReadBack`.
+/// Please see the documentation of [`read_back_lines`] for more details.
 ///
-/// [`rev_lines`]: RevBufRead::rev_lines
+/// [`read_back_lines`]: BufReadBack::read_back_lines
 #[derive(Debug)]
-pub struct RevLines<B> {
+pub struct ReadBackLines<B> {
     buf: B,
 }
 
-impl<B: BufReadBack> Iterator for RevLines<B> {
+impl<B: BufReadBack> Iterator for ReadBackLines<B> {
     type Item = Result<String>;
 
     fn next(&mut self) -> Option<Result<String>> {
@@ -621,10 +621,10 @@ impl<B: BufReadBack> Iterator for RevLines<B> {
 
 /// Reader adapter which limits the bytes read from an underlying reader.
 ///
-/// This struct is generally created by calling [`take`] on a reader.
-/// Please see the documentation of [`take`] for more details.
+/// This struct is generally created by calling [`read_back_take`] on a reader.
+/// Please see the documentation of [`read_back_take`] for more details.
 ///
-/// [`take`]: Read::take
+/// [`read_back_take`]: ReadBack::read_back_take
 #[derive(Debug)]
 pub struct ReadBackTake<T> {
     inner: T,
@@ -748,7 +748,7 @@ fn default_read_back_to_string<R: ReadBack + ?Sized>(r: &mut R, buf: &mut String
     let mut read_back_string = String::from_utf8(bytes_buf).map_err(|e| {
         std::io::Error::new(
             ErrorKind::InvalidData,
-            format!("Couldn't convert the rev-reader to a string: {}", e),
+            format!("Couldn't convert the read-back content to a string: {}", e),
         )
     })?;
 
