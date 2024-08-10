@@ -12,24 +12,24 @@
 //!
 //! fn main() {
 //!     let values = [1, 2, 3];
-//!     let mut buffer = [0];
+//!     let mut buffer = [0, 0];
 //!
 //!     // How it could look like with `Read`:
-//!     assert_eq!(values.as_slice().read(&mut buffer).ok(), Some(1));
-//!     assert_eq!(buffer, [1]);
-//!     println!("With Read: buffer = [{}]", buffer[0]);
+//!     assert_eq!(values.as_slice().read(&mut buffer).ok(), Some(2));
+//!     assert_eq!(buffer, [1, 2]);
+//!     println!("With Read: buffer = [{}, {}]", buffer[0], buffer[1]);
 //!
 //!     // The read-back version:
-//!     assert_eq!(values.as_slice().read_back(&mut buffer).ok(), Some(1));
-//!     //                 [-] and the buffer contains the value starting from the back!
-//!     assert_eq!(buffer, [3]);
-//!     println!("With ReadBack: buffer = [{}]", buffer[0]);
+//!     assert_eq!(values.as_slice().read_back(&mut buffer).ok(), Some(2));
+//!     //                 [-----] and the buffer contains the value starting from the back!
+//!     assert_eq!(buffer, [2, 3]);
+//!     println!("With ReadBack: buffer = [{}, {}]", buffer[0], buffer[1]);
 //! }
 //! ```
 //! Output:
 //! ```text
-//! With Read: buffer = [1]
-//! With ReadBack: buffer = [3]
+//! With Read: buffer = [1, 2]
+//! With ReadBack: buffer = [2, 3]
 //! ```
 mod read_back;
 
